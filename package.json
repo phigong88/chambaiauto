@@ -1,0 +1,15 @@
+{
+  "name": "cham-bai-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chấm bài kiểm tra bằng AI — đóng gói Android qua Capacitor",
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.2"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/filesystem": "^6.0.0",
+    "@capacitor/share": "^6.0.0"
+  }
+}
