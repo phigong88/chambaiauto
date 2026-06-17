@@ -89,7 +89,13 @@
   .seg-btn{flex:1;padding:9px 8px;border:none;background:transparent;border-radius:9px;font-size:13px;font-weight:650;color:var(--muted)}
   .seg-btn.active{background:rgba(255,255,255,.92);color:var(--ink);box-shadow:0 1px 3px rgba(22,27,38,.12)}
   .folderbar{display:flex;gap:8px;align-items:center;margin-top:10px}
-  .folderbar select{flex:1;font-weight:600}
+  .folderbar input{flex:1}
+  .folder-card{display:flex;width:100%;align-items:center;gap:11px;padding:13px 14px;border:1px solid var(--ring);border-radius:13px;background:var(--glass-2);margin-bottom:9px;text-align:left}
+  .folder-card svg{width:22px;height:22px;color:var(--pen);flex:0 0 22px}
+  .folder-card .fc-name{flex:1;font-weight:650;font-size:14.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .folder-card .fc-count{font-size:12.5px;color:var(--muted);font-weight:600;white-space:nowrap}
+  .folder-card:active{border-color:var(--pen)}
+  .inside-head{display:flex;align-items:center;gap:10px}
   .folder-chip{display:block;width:100%;text-align:left;margin:10px 0 2px;padding:9px 12px;border:1px solid var(--ring);border-radius:11px;background:var(--glass-2);color:var(--muted);font-size:12.5px;font-weight:600}
   .folder-chip b{color:var(--ink)}
   .pick-card{max-width:440px;margin:13vh auto 0;background:linear-gradient(180deg,rgba(255,255,255,.97),rgba(248,249,251,.97));border-radius:18px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
@@ -252,13 +258,21 @@
 
   <!-- ===== TAB KẾT QUẢ ===== -->
   <div id="panel-ketqua" style="display:none">
-    <div class="card glass">
-      <h2>Kết quả chấm</h2>
+    <div class="card glass" id="kq-folders">
+      <h2>Thư mục kết quả</h2>
       <div class="folderbar">
-        <select id="folderSel" onchange="selectFolder(this.value)"></select>
-        <button class="btn-soft btn-sm" onclick="newFolder()" aria-label="Thư mục mới">＋ Thư mục</button>
+        <input type="text" id="folderNameInput" placeholder="Tên thư mục mới (vd: Toán 5A 17/06)" onkeydown="if(event.key==='Enter')addFolderFromInput()">
+        <button class="btn-slate btn-sm" onclick="addFolderFromInput()">＋ Thêm</button>
       </div>
-      <div class="res-head" style="margin-top:10px">
+      <div id="folderCards" style="margin-top:12px"></div>
+    </div>
+
+    <div class="card glass" id="kq-inside" style="display:none">
+      <div class="inside-head">
+        <button class="btn-ghost btn-sm" onclick="backToFolders()">‹ Thư mục</button>
+        <h2 id="insideTitle" style="margin:0;flex:1;font-size:15px"></h2>
+      </div>
+      <div class="res-head" style="margin-top:11px">
         <span class="stat">Sĩ số: <b id="stCount">0</b></span>
         <span class="stat">TB: <b id="stAvg">0</b></span>
         <span class="stat">Cần xem: <b id="stReview" style="color:var(--warn)">0</b></span>
@@ -266,10 +280,10 @@
       <div class="res-actions" style="margin-top:8px">
         <button class="btn-ghost btn-sm" onclick="exportDiem()">Xuất điểm</button>
         <button class="btn-ghost btn-sm" onclick="downloadAllImages()">Tải ảnh</button>
-        <button class="btn-ghost btn-sm" onclick="renameFolder()">Đổi tên</button>
+        <button class="btn-ghost btn-sm" id="btnRename" onclick="renameFolder()">Đổi tên</button>
         <button class="btn-ghost btn-sm" style="color:var(--pen)" onclick="deleteFolder()">Xoá thư mục</button>
       </div>
-      <div id="paperList"><div class="empty">Chưa có bài nào.</div></div>
+      <div id="paperList"><div class="empty">Thư mục này chưa có bài nào.</div></div>
     </div>
   </div>
 </div>
@@ -375,7 +389,7 @@ window.addEventListener('load',async()=>{
   try{const ak=await idbGet('settings','answerkey');if(ak){KEYIMAGES=ak.images||[];KEYDATA=ak.keydata||[];document.getElementById('notes').value=ak.notes||'';MODE=ak.mode||'key';if(ak.totalPoints)document.getElementById('totalPoints').value=ak.totalPoints;}}catch(e){}
   applyMode();
   renderKeyThumbs();renderKeyTable();
-  await loadFolders();renderFolderSelect();
+  await loadFolders();renderFolderCards();
   await refreshPapers();updateFolderChip();showTab('cham');
   if('serviceWorker' in navigator){try{await navigator.serviceWorker.register('sw.js');}catch(e){}}
 });
@@ -384,6 +398,7 @@ function apiKeyEl(){return document.getElementById('apiKey');}
 /* ===================== TAB ===================== */
 function showTab(name){curTab=name;
   ['cham','dapan','ketqua'].forEach(t=>{document.getElementById('panel-'+t).style.display=t===name?'block':'none';document.getElementById('tab-'+t).classList.toggle('active',t===name);});
+  if(name==='ketqua')backToFolders();
   updateReady();
 }
 
@@ -506,6 +521,11 @@ async function geminiRaw(parts){
   const data=await resp.json();
   return (data.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('');
 }
+const MATH_RULES=`QUY TẮC CHẤM TOÁN (rất quan trọng):
+- Chấm theo CÁCH LÀM, không chỉ nhìn đáp số. Đáp số đúng nhưng cách làm sai thì KHÔNG cho điểm tối đa (nhiều khả năng chép).
+- Câu "Đặt tính rồi tính" (cộng, trừ, nhân, chia): xét các chữ số có nằm ĐÚNG CỘT (đúng hàng) không, dấu phẩy thẳng nhau. CHỈ căn cứ vào việc đúng cột; BỎ QUA xê dịch nhỏ cỡ nửa chữ số do viết tay (vẫn coi là thẳng hàng). CHỈ coi là ĐẶT TÍNH SAI khi một chữ số lệch hẳn từ MỘT CỘT (một chữ số) trở lên so với vị trí đúng (vd chữ số hàng đơn vị bị viết sang cột hàng chục). Nếu đặt tính sai cột mà vẫn ra đáp số đúng thì coi là không hợp lệ (chép): cho 0 điểm hoặc rất thấp, ghi lý do "đặt tính lệch cột".
+- Phép nhân/chia nhiều bước: phải có các bước trung gian hợp lý; thiếu bước hoặc bước sai thì trừ điểm dù kết quả cuối đúng.
+- Chỉ cho điểm tối đa khi CẢ cách làm lẫn kết quả đều đúng (hoặc cách giải khác nhưng các bước đều đúng và ra đúng kết quả).`;
 function buildGradePrompt(nPages){
   const notes=document.getElementById('notes').value.trim();
   const list=KEYDATA.map(k=>{
@@ -518,6 +538,7 @@ ${nPages} ảnh là bài làm của MỘT học sinh (trang 1..${nPages}).
 ĐÁP ÁN từng câu:
 ${list}
 ${notes?`\nGHI CHÚ THÊM: ${notes}\n`:''}
+${MATH_RULES}
 Với MỖI câu:
 - "tra_loi": chép ĐÚNG những gì học sinh viết/khoanh, giữ nguyên dấu thanh. Trống/không đọc được → "".
 - Câu TỰ LUẬN: chấm theo đáp án/hướng dẫn. Nếu các bước đúng và RA ĐÚNG kết quả thì cho điểm tối đa, kể cả giải cách khác; nhiều phần (a,b) thì chấm từng phần rồi cộng. Cho "diem_dat" (0..tối đa) và "ly_do" ngắn.
@@ -538,6 +559,7 @@ function buildAutoPrompt(nPages){
 ${nPages} ảnh là bài làm của MỘT học sinh (có cả ĐỀ và phần làm, trang 1..${nPages}). KHÔNG có sẵn đáp án — hãy TỰ đọc đề, TỰ xác định đáp án đúng rồi chấm.
 Tổng điểm toàn bài là ${total}. Phân bổ "diem_toi_da" cho từng câu hợp lý (theo điểm in trên đề nếu thấy, nếu không thì chia theo độ khó); tổng các "diem_toi_da" nên bằng ${total}.
 ${notes?`\nGHI CHÚ THÊM: ${notes}\n`:''}
+${MATH_RULES}
 Với MỖI câu:
 - "tra_loi": chép ĐÚNG những gì học sinh viết/khoanh.
 - "dap_an_dung": đáp án đúng do bạn xác định.
@@ -605,8 +627,10 @@ async function runGrading(fid){
       }catch(e){lastErr=e;if(a===0)await sleep(800);}}
     if(!ok)log(`✗ Lỗi: ${lastErr.message}`,true);
     if(i<total-1)await sleep(delay);}
-  setProg(1);PENDING=[];activeStu=-1;renderPending();renderPapers();
-  document.getElementById('progWrap').style.display='none';toast('Đã chấm xong');showTab('ketqua');
+  setProg(1);PENDING=[];activeStu=-1;renderPending();renderFolderCards();
+  document.getElementById('progWrap').style.display='none';toast('Đã chấm xong');
+  curTab='ketqua';['cham','dapan','ketqua'].forEach(t=>{document.getElementById('panel-'+t).style.display=t==='ketqua'?'block':'none';document.getElementById('tab-'+t).classList.toggle('active',t==='ketqua');});
+  openFolderView(fid);updateReady();
 }
 function setProg(p){document.getElementById('progBar').style.width=Math.round(p*100)+'%';}
 function log(m,e){const l=document.getElementById('log');l.innerHTML+=`<div class="${e?'err':''}">${escHtml(m)}</div>`;l.scrollTop=l.scrollHeight;}
@@ -646,10 +670,33 @@ function countIn(fid){return PAPERS.filter(p=>inFolder(p,fid)).length;}
 function hasOrphans(){return PAPERS.some(p=>!p.folderId||!FOLDERS.find(f=>f.id===p.folderId));}
 function papersInView(){return PAPERS.filter(p=>inFolder(p,curFolder)).sort((a,b)=>a.createdAt-b.createdAt);}
 function folderName(fid){if(fid==='__none__')return 'Chưa phân loại';const f=FOLDERS.find(x=>x.id===fid);return f?f.name:'(thư mục)';}
-function renderFolderSelect(){
-  const sel=document.getElementById('folderSel');if(!sel)return;sel.innerHTML='';
-  FOLDERS.slice().sort((a,b)=>a.createdAt-b.createdAt).forEach(f=>{const o=document.createElement('option');o.value=f.id;o.textContent=`${f.name} (${countIn(f.id)})`;if(f.id===curFolder)o.selected=true;sel.appendChild(o);});
-  if(hasOrphans()){const o=document.createElement('option');o.value='__none__';o.textContent=`Chưa phân loại (${countIn('__none__')})`;if(curFolder==='__none__')o.selected=true;sel.appendChild(o);}
+function renderFolderCards(){
+  const w=document.getElementById('folderCards');if(!w)return;w.innerHTML='';
+  const sorted=FOLDERS.slice().sort((a,b)=>b.createdAt-a.createdAt);
+  if(!sorted.length&&!hasOrphans()){w.innerHTML='<div class="empty">Chưa có thư mục. Nhập tên rồi bấm “＋ Thêm”.</div>';return;}
+  sorted.forEach(f=>w.appendChild(folderCardEl(f.id,f.name)));
+  if(hasOrphans())w.appendChild(folderCardEl('__none__','Chưa phân loại'));
+}
+function folderCardEl(id,name){
+  const b=document.createElement('button');b.className='folder-card';b.onclick=()=>openFolderView(id);
+  b.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.2l1.8 2H18.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-9Z"/></svg>
+    <span class="fc-name">${escHtml(name)}</span><span class="fc-count">${countIn(id)} bài ›</span>`;
+  return b;
+}
+function openFolderView(id){curFolder=id;saveFolders();
+  document.getElementById('kq-folders').style.display='none';
+  document.getElementById('kq-inside').style.display='block';
+  document.getElementById('insideTitle').textContent=folderName(id);
+  document.getElementById('btnRename').style.display=(id==='__none__')?'none':'';
+  renderPapers();}
+function backToFolders(){
+  document.getElementById('kq-inside').style.display='none';
+  document.getElementById('kq-folders').style.display='block';
+  renderFolderCards();}
+async function addFolderFromInput(){
+  const inp=document.getElementById('folderNameInput');const name=(inp.value||'').trim();
+  if(!name){toast('Hãy nhập tên thư mục');return;}
+  const f={id:'fd'+Date.now(),name,createdAt:Date.now()};FOLDERS.push(f);await saveFolders();inp.value='';renderFolderCards();toast('Đã thêm thư mục');
 }
 function updateFolderChip(){const c=document.getElementById('folderChip');if(c)c.innerHTML='Chấm xong sẽ chọn thư mục để lưu kết quả · xem ở tab Kết quả';}
 function openFolderPick(){renderFolderPickList();document.getElementById('folderPickBg').classList.add('show');document.body.style.overflow='hidden';}
@@ -662,30 +709,26 @@ function renderFolderPickList(){
     b.innerHTML=`<span>${escHtml(f.name)}</span><span class="pg">${countIn(f.id)} bài</span>`;
     b.onclick=()=>choosePickFolder(f.id);w.appendChild(b);});
 }
-async function choosePickFolder(id){curFolder=id;await saveFolders();renderFolderSelect();closeFolderPick();runGrading(id);}
+async function choosePickFolder(id){curFolder=id;await saveFolders();closeFolderPick();runGrading(id);}
 async function pickNewFolder(){const name=prompt('Tên thư mục mới:','Bài '+fmtDate(Date.now()));if(name===null)return;
-  const f={id:'fd'+Date.now(),name:name.trim()||('Bài '+fmtDate(Date.now())),createdAt:Date.now()};FOLDERS.push(f);curFolder=f.id;await saveFolders();renderFolderSelect();closeFolderPick();runGrading(f.id);}
-async function selectFolder(id){curFolder=id;await saveFolders();renderPapers();updateFolderChip();}
-async function newFolder(){const name=prompt('Tên thư mục (vd: Toán 5A ngày '+fmtDate(Date.now())+'):','Bài '+fmtDate(Date.now()));if(name===null)return;
-  const f={id:'fd'+Date.now(),name:name.trim()||('Bài '+fmtDate(Date.now())),createdAt:Date.now()};FOLDERS.push(f);curFolder=f.id;await saveFolders();renderFolderSelect();renderPapers();updateFolderChip();toast('Đã tạo thư mục');}
+  const f={id:'fd'+Date.now(),name:name.trim()||('Bài '+fmtDate(Date.now())),createdAt:Date.now()};FOLDERS.push(f);curFolder=f.id;await saveFolders();closeFolderPick();runGrading(f.id);}
 async function renameFolder(){if(curFolder==='__none__'){toast('Không đổi tên mục này');return;}const f=FOLDERS.find(x=>x.id===curFolder);if(!f)return;
-  const name=prompt('Đổi tên thư mục:',f.name);if(name===null)return;f.name=name.trim()||f.name;await saveFolders();renderFolderSelect();updateFolderChip();toast('Đã đổi tên');}
+  const name=prompt('Đổi tên thư mục:',f.name);if(name===null)return;f.name=name.trim()||f.name;await saveFolders();
+  document.getElementById('insideTitle').textContent=f.name;toast('Đã đổi tên');}
 async function deleteFolder(){
   if(curFolder==='__none__'){if(!confirm('Xoá toàn bộ bài chưa phân loại?'))return;
     const ids=PAPERS.filter(p=>inFolder(p,'__none__')).map(p=>p.id);for(const id of ids)await idbDel('papers',id);
-    PAPERS=PAPERS.filter(p=>!ids.includes(p.id));curFolder=FOLDERS[0]?FOLDERS[0].id:null;await saveFolders();renderFolderSelect();renderPapers();updateFolderChip();toast('Đã xoá');return;}
+    PAPERS=PAPERS.filter(p=>!ids.includes(p.id));await saveFolders();backToFolders();toast('Đã xoá');return;}
   const f=FOLDERS.find(x=>x.id===curFolder);if(!f)return;
   if(!confirm(`Xoá thư mục “${f.name}” và toàn bộ ${countIn(f.id)} bài trong đó?`))return;
   const ids=PAPERS.filter(p=>inFolder(p,f.id)).map(p=>p.id);for(const id of ids)await idbDel('papers',id);
-  PAPERS=PAPERS.filter(p=>!ids.includes(p.id));FOLDERS=FOLDERS.filter(x=>x.id!==f.id);
-  if(!FOLDERS.length){const id='fd'+Date.now();FOLDERS=[{id,name:'Bài '+fmtDate(Date.now()),createdAt:Date.now()}];curFolder=id;}else curFolder=FOLDERS[0].id;
-  await saveFolders();renderFolderSelect();renderPapers();updateFolderChip();toast('Đã xoá thư mục');
+  PAPERS=PAPERS.filter(p=>!ids.includes(p.id));FOLDERS=FOLDERS.filter(x=>x.id!==f.id);curFolder=null;
+  await saveFolders();backToFolders();toast('Đã xoá thư mục');
 }
 
 /* ===================== DANH SÁCH BÀI ===================== */
-async function refreshPapers(){PAPERS=await idbAll('papers');renderPapers();}
-function renderPapers(){const wrap=document.getElementById('paperList');wrap.innerHTML='';
-  renderFolderSelect();
+async function refreshPapers(){PAPERS=await idbAll('papers');renderFolderCards();renderPapers();}
+function renderPapers(){const wrap=document.getElementById('paperList');if(!wrap)return;wrap.innerHTML='';
   const list=papersInView();
   if(!list.length)wrap.innerHTML='<div class="empty">Thư mục này chưa có bài nào.</div>';
   list.forEach((p,i)=>{const correct=p.details.filter(d=>d.status==='ok').length,tot=p.details.length;
