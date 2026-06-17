@@ -521,11 +521,14 @@ async function geminiRaw(parts){
   const data=await resp.json();
   return (data.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('');
 }
-const MATH_RULES=`QUY TẮC CHẤM TOÁN (rất quan trọng):
-- Chấm theo CÁCH LÀM, không chỉ nhìn đáp số. Đáp số đúng nhưng cách làm sai thì KHÔNG cho điểm tối đa (nhiều khả năng chép).
-- Câu "Đặt tính rồi tính" (cộng, trừ, nhân, chia): xét các chữ số có nằm ĐÚNG CỘT (đúng hàng) không, dấu phẩy thẳng nhau. CHỈ căn cứ vào việc đúng cột; BỎ QUA xê dịch nhỏ cỡ nửa chữ số do viết tay (vẫn coi là thẳng hàng). CHỈ coi là ĐẶT TÍNH SAI khi một chữ số lệch hẳn từ MỘT CỘT (một chữ số) trở lên so với vị trí đúng (vd chữ số hàng đơn vị bị viết sang cột hàng chục). Nếu đặt tính sai cột mà vẫn ra đáp số đúng thì coi là không hợp lệ (chép): cho 0 điểm hoặc rất thấp, ghi lý do "đặt tính lệch cột".
+const MATH_RULES=`QUY TẮC CHẤM TOÁN (rất quan trọng, phải tuân thủ nghiêm):
+- Chấm theo CÁCH LÀM, không chỉ nhìn đáp số. Đáp số đúng nhưng cách làm sai thì KHÔNG cho điểm (nhiều khả năng chép).
+- Nếu đề ghi "Đặt tính rồi tính": việc ĐẶT TÍNH ĐÚNG là ĐIỀU KIỆN BẮT BUỘC để có điểm. Hãy NHÌN KỸ vị trí TỪNG chữ số trong ảnh và XÉT CÁCH ĐẶT TÍNH TRƯỚC, rồi mới xét đáp số. TUYỆT ĐỐI KHÔNG kết luận "đặt tính đúng" chỉ vì đáp số đúng.
+- Cách xét đặt tính theo CỘT: các chữ số cùng hàng phải thẳng cột; với số thập phân thì DẤU PHẨY của các số phải thẳng cùng một cột. Bỏ qua xê dịch nhỏ cỡ nửa chữ số do viết tay. Coi là ĐẶT TÍNH SAI khi một chữ số (hoặc dấu phẩy) lệch hẳn từ MỘT CỘT (một chữ số) trở lên so với vị trí đúng — ví dụ dấu phẩy không thẳng, hoặc hàng đơn vị viết sang cột hàng chục.
+- Nếu đặt tính SAI thì ý đó 0 điểm, DÙ đáp số có đúng (coi là chép). Ghi lý do rõ, ví dụ "đặt tính lệch cột, dấu phẩy không thẳng".
+- Một câu có nhiều ý (a, b, ...): chấm RIÊNG từng ý và cộng lại. Ý nào đặt tính sai thì ý đó 0 điểm, ý đúng vẫn được điểm của ý đó. (Ví dụ câu 1 điểm có ý a và b, mỗi ý 0,5đ: a đúng + b đặt tính sai → 0,5 điểm.)
 - Phép nhân/chia nhiều bước: phải có các bước trung gian hợp lý; thiếu bước hoặc bước sai thì trừ điểm dù kết quả cuối đúng.
-- Chỉ cho điểm tối đa khi CẢ cách làm lẫn kết quả đều đúng (hoặc cách giải khác nhưng các bước đều đúng và ra đúng kết quả).`;
+- Chỉ cho điểm tối đa của ý khi CẢ cách làm lẫn kết quả đều đúng.`;
 function buildGradePrompt(nPages){
   const notes=document.getElementById('notes').value.trim();
   const list=KEYDATA.map(k=>{
