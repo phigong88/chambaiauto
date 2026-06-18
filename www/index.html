@@ -307,20 +307,22 @@
     <div class="modal-head"><h3 style="flex:1">Cài đặt</h3>
       <button class="btn-primary btn-sm" onclick="saveConfig();closeSettings();toast('Đã lưu')">Lưu &amp; đóng</button></div>
     <div class="modal-body">
-      <div style="margin-bottom:13px"><label>Gemini API Key</label><input type="text" id="apiKey" placeholder="Dán key (bắt đầu bằng AIza...)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="ck-no-fill" data-form-type="other" oninput="updateKeyStatus()">
-        <div id="keyStatus" class="note" style="margin-top:5px"></div></div>
+      <div style="margin-bottom:13px"><label>Gemini API Key</label><input type="password" id="apiKey" placeholder="Dán key (AIza... hoặc AQ...)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="ck-no-fill" data-form-type="other"></div>
       <div class="row">
-        <div><label>Mô hình</label><input type="text" id="model" value="gemini-3.1-flash-lite"></div>
+        <div><label>Mô hình</label>
+          <select id="model">
+            <option value="gemini-3.5-flash">gemini-3.5-flash (đọc hình kỹ)</option>
+            <option value="gemini-3.1-flash-lite" selected>gemini-3.1-flash-lite (nhanh)</option>
+            <option value="gemini-3-flash">gemini-3-flash</option>
+            <option value="gemini-2.5-flash">gemini-2.5-flash (free)</option>
+          </select>
+        </div>
         <div><label>Nghỉ giữa bài (giây)</label><input type="number" id="delay" value="1.2" step="0.2" min="0"></div>
       </div>
-      <button class="btn-soft btn-sm" style="margin-top:8px" onclick="fetchModels()">Tải danh sách model khả dụng</button>
-      <div id="modelListWrap" style="display:none;margin-top:10px">
-        <label>Chọn model (key của bạn dùng được)</label>
-        <select id="modelList" onchange="document.getElementById('model').value=this.value"></select>
-        <p class="note">Bài có nhiều toán “đặt tính” nên chọn <b>gemini-3.5-flash</b> (đọc hình kỹ hơn). Bài thường thì <b>gemini-3.1-flash-lite</b> cho nhanh.</p>
-      </div>
+      <button class="btn-soft btn-sm" style="margin-top:8px" onclick="fetchModels()">Kiểm tra key &amp; tải thêm model</button>
+      <div id="modelMsg" class="note" style="margin-top:8px"></div>
       <p class="note">Lấy key miễn phí tại aistudio.google.com. Điểm và ảnh lưu offline trong máy.</p>
-      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-B</div></div>
+      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-C</div></div>
     </div>
   </div>
 </div>
@@ -392,9 +394,9 @@ function idbClear(s){return new Promise((res,rej)=>{const r=st(s,'readwrite').cl
 /* ===================== KHỞI ĐỘNG ===================== */
 window.addEventListener('load',async()=>{
   try{await openDB();}catch(e){alert('Không mở được bộ nhớ máy.');}
-  try{const cfg=await idbGet('settings','config');if(cfg){apiKeyEl().value=cfg.apiKey||'';document.getElementById('model').value=cfg.model||'gemini-3.1-flash-lite';document.getElementById('delay').value=cfg.delay||'1.2';}}catch(e){}
+  try{const cfg=await idbGet('settings','config');if(cfg){apiKeyEl().value=cfg.apiKey||'';setModelValue(cfg.model||'gemini-3.1-flash-lite');document.getElementById('delay').value=cfg.delay||'1.2';}}catch(e){}
   try{const ak=await idbGet('settings','answerkey');if(ak){KEYIMAGES=ak.images||[];KEYDATA=ak.keydata||[];document.getElementById('notes').value=ak.notes||'';MODE=ak.mode||'key';if(ak.totalPoints)document.getElementById('totalPoints').value=ak.totalPoints;}}catch(e){}
-  applyMode();updateKeyStatus();
+  applyMode();
   renderKeyThumbs();renderKeyTable();
   await loadFolders();renderFolderCards();
   await refreshPapers();updateFolderChip();showTab('cham');
@@ -410,7 +412,7 @@ function showTab(name){curTab=name;
 }
 
 /* ===================== CÀI ĐẶT ===================== */
-function openSettings(){updateKeyStatus();document.getElementById('settingsBg').classList.add('show');document.body.style.overflow='hidden';}
+function openSettings(){document.getElementById('settingsBg').classList.add('show');document.body.style.overflow='hidden';}
 function closeSettings(){document.getElementById('settingsBg').classList.remove('show');document.body.style.overflow='';}
 async function saveConfig(){try{await idbPut('settings',{k:'config',apiKey:getKey(),model:document.getElementById('model').value.trim(),delay:document.getElementById('delay').value});}catch(e){}}
 document.getElementById('settingsBg').addEventListener('click',e=>{if(e.target.id==='settingsBg')closeSettings();});
@@ -520,39 +522,31 @@ function updateReady(){
 
 /* ===================== GEMINI ===================== */
 function getKey(){return apiKeyEl().value.replace(/\s+/g,'');}
-function updateKeyStatus(){const el=document.getElementById('keyStatus');if(!el)return;const k=getKey();
-  if(!k){el.textContent='Ô key đang trống — hãy dán key vào.';el.style.color='var(--pen)';return;}
-  const ok=k.startsWith('AIza');
-  el.textContent=`Đã nhập ${k.length} ký tự${ok?', bắt đầu AIza ✓':' — KHÔNG bắt đầu bằng AIza ⚠ (sai key?)'}`;
-  el.style.color=ok?'var(--ok)':'var(--pen)';}
+function setModelValue(m){const sel=document.getElementById('model');if(!sel)return;
+  if(![...sel.options].some(o=>o.value===m)){const o=document.createElement('option');o.value=m;o.textContent=m;sel.appendChild(o);}
+  sel.value=m;}
 async function fetchModels(){
-  const st=document.getElementById('keyStatus');
-  if(!getKey()){updateKeyStatus();toast('Ô key đang trống');return;}
+  const st=document.getElementById('modelMsg');
+  if(!getKey()){if(st){st.textContent='Hãy nhập key trước.';st.style.color='var(--pen)';}return;}
   if(st){st.textContent='Đang kiểm tra key...';st.style.color='var(--muted)';}
   try{
-    const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(getKey())}`);
+    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models',{headers:{'x-goog-api-key':getKey()}});
     const txt=await r.text();
-    if(!r.ok){
-      let msg=txt;try{msg=JSON.parse(txt).error.message;}catch(e){}
-      if(st){st.textContent='✗ Google từ chối key: '+msg;st.style.color='var(--pen)';}
-      return;
-    }
+    if(!r.ok){let msg=txt;try{msg=JSON.parse(txt).error.message;}catch(e){}
+      if(st){st.textContent='✗ Google báo: '+msg;st.style.color='var(--pen)';}return;}
     const data=JSON.parse(txt);
-    const all=(data.models||[]).filter(m=>{
-      const methods=m.supportedGenerationMethods||m.supportedActions||[];
-      return methods.includes('generateContent')&&/gemini/i.test(m.name)&&!/embedding|aqa|image|tts|live|robot|audio|veo|imagen/i.test(m.name);
-    });
-    const sel=document.getElementById('modelList');sel.innerHTML='';
-    const cur=document.getElementById('model').value.trim();
-    all.forEach(m=>{const id=m.name.split('/').pop();const o=document.createElement('option');o.value=id;o.textContent=(m.displayName?m.displayName+' — ':'')+id;if(id===cur)o.selected=true;sel.appendChild(o);});
-    document.getElementById('modelListWrap').style.display=all.length?'block':'none';
-    if(st){st.textContent='✓ Key dùng được — '+all.length+' model. Chọn model ở danh sách bên dưới.';st.style.color='var(--ok)';}
+    const all=(data.models||[]).map(m=>m.name.split('/').pop())
+      .filter(id=>/gemini/i.test(id)&&!/embedding|aqa|image|tts|live|robot|audio|veo|imagen/i.test(id));
+    const sel=document.getElementById('model');const cur=sel.value;
+    sel.innerHTML='';all.forEach(id=>{const o=document.createElement('option');o.value=id;o.textContent=id;sel.appendChild(o);});
+    if(all.includes(cur))sel.value=cur;
+    if(st){st.textContent='✓ Key dùng được — đã tải '+all.length+' model, chọn ở ô Mô hình.';st.style.color='var(--ok)';}
   }catch(e){if(st){st.textContent='Lỗi mạng: '+e.message;st.style.color='var(--pen)';}}
 }
 async function geminiRaw(parts){
   const model=document.getElementById('model').value.trim()||'gemini-3.1-flash-lite';
-  const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(getKey())}`;
-  const resp=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts}],generationConfig:{temperature:0,responseMimeType:"application/json"}})});
+  const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const resp=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':getKey()},body:JSON.stringify({contents:[{parts}],generationConfig:{temperature:0,responseMimeType:"application/json"}})});
   if(!resp.ok)throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0,140)}`);
   const data=await resp.json();
   return (data.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('');
