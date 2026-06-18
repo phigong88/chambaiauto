@@ -307,7 +307,8 @@
     <div class="modal-head"><h3 style="flex:1">Cài đặt</h3>
       <button class="btn-primary btn-sm" onclick="saveConfig();closeSettings();toast('Đã lưu')">Lưu &amp; đóng</button></div>
     <div class="modal-body">
-      <div style="margin-bottom:13px"><label>Gemini API Key</label><input type="text" id="apiKey" placeholder="Dán key (bắt đầu bằng AIza...)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="ck-no-fill" data-form-type="other"></div>
+      <div style="margin-bottom:13px"><label>Gemini API Key</label><input type="text" id="apiKey" placeholder="Dán key (bắt đầu bằng AIza...)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="ck-no-fill" data-form-type="other" oninput="updateKeyStatus()">
+        <div id="keyStatus" class="note" style="margin-top:5px"></div></div>
       <div class="row">
         <div><label>Mô hình</label><input type="text" id="model" value="gemini-3.1-flash-lite"></div>
         <div><label>Nghỉ giữa bài (giây)</label><input type="number" id="delay" value="1.2" step="0.2" min="0"></div>
@@ -319,7 +320,7 @@
         <p class="note">Bài có nhiều toán “đặt tính” nên chọn <b>gemini-3.5-flash</b> (đọc hình kỹ hơn). Bài thường thì <b>gemini-3.1-flash-lite</b> cho nhanh.</p>
       </div>
       <p class="note">Lấy key miễn phí tại aistudio.google.com. Điểm và ảnh lưu offline trong máy.</p>
-      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div></div>
+      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-B</div></div>
     </div>
   </div>
 </div>
@@ -393,7 +394,7 @@ window.addEventListener('load',async()=>{
   try{await openDB();}catch(e){alert('Không mở được bộ nhớ máy.');}
   try{const cfg=await idbGet('settings','config');if(cfg){apiKeyEl().value=cfg.apiKey||'';document.getElementById('model').value=cfg.model||'gemini-3.1-flash-lite';document.getElementById('delay').value=cfg.delay||'1.2';}}catch(e){}
   try{const ak=await idbGet('settings','answerkey');if(ak){KEYIMAGES=ak.images||[];KEYDATA=ak.keydata||[];document.getElementById('notes').value=ak.notes||'';MODE=ak.mode||'key';if(ak.totalPoints)document.getElementById('totalPoints').value=ak.totalPoints;}}catch(e){}
-  applyMode();
+  applyMode();updateKeyStatus();
   renderKeyThumbs();renderKeyTable();
   await loadFolders();renderFolderCards();
   await refreshPapers();updateFolderChip();showTab('cham');
@@ -409,7 +410,7 @@ function showTab(name){curTab=name;
 }
 
 /* ===================== CÀI ĐẶT ===================== */
-function openSettings(){document.getElementById('settingsBg').classList.add('show');document.body.style.overflow='hidden';}
+function openSettings(){updateKeyStatus();document.getElementById('settingsBg').classList.add('show');document.body.style.overflow='hidden';}
 function closeSettings(){document.getElementById('settingsBg').classList.remove('show');document.body.style.overflow='';}
 async function saveConfig(){try{await idbPut('settings',{k:'config',apiKey:getKey(),model:document.getElementById('model').value.trim(),delay:document.getElementById('delay').value});}catch(e){}}
 document.getElementById('settingsBg').addEventListener('click',e=>{if(e.target.id==='settingsBg')closeSettings();});
@@ -519,24 +520,34 @@ function updateReady(){
 
 /* ===================== GEMINI ===================== */
 function getKey(){return apiKeyEl().value.replace(/\s+/g,'');}
+function updateKeyStatus(){const el=document.getElementById('keyStatus');if(!el)return;const k=getKey();
+  if(!k){el.textContent='Ô key đang trống — hãy dán key vào.';el.style.color='var(--pen)';return;}
+  const ok=k.startsWith('AIza');
+  el.textContent=`Đã nhập ${k.length} ký tự${ok?', bắt đầu AIza ✓':' — KHÔNG bắt đầu bằng AIza ⚠ (sai key?)'}`;
+  el.style.color=ok?'var(--ok)':'var(--pen)';}
 async function fetchModels(){
-  if(!getKey()){toast('Hãy nhập API key trước');return;}
-  toast('Đang tải danh sách model...');
+  const st=document.getElementById('keyStatus');
+  if(!getKey()){updateKeyStatus();toast('Ô key đang trống');return;}
+  if(st){st.textContent='Đang kiểm tra key...';st.style.color='var(--muted)';}
   try{
     const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(getKey())}`);
-    if(!r.ok)throw new Error('HTTP '+r.status);
-    const data=await r.json();
+    const txt=await r.text();
+    if(!r.ok){
+      let msg=txt;try{msg=JSON.parse(txt).error.message;}catch(e){}
+      if(st){st.textContent='✗ Google từ chối key: '+msg;st.style.color='var(--pen)';}
+      return;
+    }
+    const data=JSON.parse(txt);
     const all=(data.models||[]).filter(m=>{
       const methods=m.supportedGenerationMethods||m.supportedActions||[];
       return methods.includes('generateContent')&&/gemini/i.test(m.name)&&!/embedding|aqa|image|tts|live|robot|audio|veo|imagen/i.test(m.name);
     });
-    if(!all.length){toast('Không thấy model phù hợp');return;}
     const sel=document.getElementById('modelList');sel.innerHTML='';
     const cur=document.getElementById('model').value.trim();
     all.forEach(m=>{const id=m.name.split('/').pop();const o=document.createElement('option');o.value=id;o.textContent=(m.displayName?m.displayName+' — ':'')+id;if(id===cur)o.selected=true;sel.appendChild(o);});
-    document.getElementById('modelListWrap').style.display='block';
-    toast('Đã tải '+all.length+' model — chọn trong danh sách');
-  }catch(e){toast('Lỗi: '+e.message);}
+    document.getElementById('modelListWrap').style.display=all.length?'block':'none';
+    if(st){st.textContent='✓ Key dùng được — '+all.length+' model. Chọn model ở danh sách bên dưới.';st.style.color='var(--ok)';}
+  }catch(e){if(st){st.textContent='Lỗi mạng: '+e.message;st.style.color='var(--pen)';}}
 }
 async function geminiRaw(parts){
   const model=document.getElementById('model').value.trim()||'gemini-3.1-flash-lite';
