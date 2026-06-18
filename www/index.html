@@ -321,7 +321,7 @@
       <button class="btn-soft btn-sm" style="margin-top:8px" onclick="fetchModels()">Kiểm tra key &amp; tải thêm model</button>
       <div id="modelMsg" class="note" style="margin-top:8px"></div>
       <p class="note">Lấy key miễn phí tại aistudio.google.com. Điểm và ảnh lưu offline trong máy.</p>
-      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-J</div></div>
+      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-L</div></div>
     </div>
   </div>
 </div>
@@ -581,9 +581,13 @@ async function geminiRaw(parts){
 }
 const MATH_RULES=`QUY TẮC CHẤM TOÁN (rất quan trọng, phải tuân thủ nghiêm):
 - Chấm theo CÁCH LÀM, không chỉ nhìn đáp số. Đáp số đúng nhưng cách làm sai thì KHÔNG cho điểm (nhiều khả năng chép).
-- Nếu đề ghi "Đặt tính rồi tính": việc ĐẶT TÍNH ĐÚNG là ĐIỀU KIỆN BẮT BUỘC để có điểm. Hãy NHÌN KỸ vị trí TỪNG chữ số trong ảnh và XÉT CÁCH ĐẶT TÍNH TRƯỚC, rồi mới xét đáp số. TUYỆT ĐỐI KHÔNG kết luận "đặt tính đúng" chỉ vì đáp số đúng.
-- Cách xét đặt tính theo CỘT: các chữ số cùng hàng phải thẳng cột; với số thập phân thì DẤU PHẨY của các số phải thẳng cùng một cột. Bỏ qua xê dịch nhỏ cỡ nửa chữ số do viết tay. Coi là ĐẶT TÍNH SAI khi một chữ số (hoặc dấu phẩy) lệch hẳn từ MỘT CỘT (một chữ số) trở lên so với vị trí đúng — ví dụ dấu phẩy không thẳng, hoặc hàng đơn vị viết sang cột hàng chục.
-- Nếu đặt tính SAI thì ý đó 0 điểm, DÙ đáp số có đúng (coi là chép). Ghi lý do rõ, ví dụ "đặt tính lệch cột, dấu phẩy không thẳng".
+- Nếu đề ghi "Đặt tính rồi tính": ĐẶT TÍNH ĐÚNG là ĐIỀU KIỆN BẮT BUỘC để có điểm. BẮT BUỘC phân tích CỘT trước khi cho điểm, và VIẾT RÕ phần phân tích đó vào "ly_do". Các bước:
+   1) Với MỖI số trong phép tính, xác định vị trí ngang của nó trên ảnh. Số THẬP PHÂN: xét cột của DẤU PHẨY. Số TỰ NHIÊN: xét cột của chữ số HÀNG ĐƠN VỊ (chữ số ngoài cùng bên phải).
+   2) Các số phải đặt sao cho dấu phẩy (hoặc hàng đơn vị) THẲNG cùng MỘT cột dọc. Ước lượng độ lệch theo SỐ CỘT (mỗi chữ số tính là 1 cột).
+   2b) KIỂM TRA CỤ THỂ từng cặp chữ số cùng hàng (dóng thước thẳng đứng từ trên xuống): hàng đơn vị phải thẳng hàng đơn vị, hàng chục thẳng hàng chục, dấu phẩy thẳng dấu phẩy. Nếu phát hiện một chữ số của số dưới bị đặt thẳng cột với một chữ số KHÁC HÀNG của số trên (ví dụ: chữ số hàng chục của số trừ lại nằm thẳng cột với chữ số hàng đơn vị của số bị trừ; hoặc một chữ số đặt thẳng với dấu phẩy) → đó là LỆCH CỘT → ĐẶT TÍNH SAI.
+   3) Ghi kết luận vào "ly_do" theo đúng mẫu: "81,65 dấu phẩy ở cột X; 45,29 dấu phẩy ở cột Y → lệch Z cột" (hoặc nêu cặp chữ số bị đặt sai hàng). Lệch từ 1 cột trở lên → ĐẶT TÍNH SAI.
+   - Chỉ bỏ qua xê dịch RẤT nhỏ (dưới nửa chữ số do viết tay). Lệch 1 cột trở lên (dấu phẩy không thẳng, hàng đơn vị viết lệch sang cột khác) là SAI — kể cả số tự nhiên không có dấu phẩy vẫn phải thẳng hàng đơn vị.
+- Đặt tính SAI thì ý đó 0 điểm DÙ đáp số đúng (coi là chép). Nếu học sinh GẠCH XÓA rồi viết lại: chỉ xét bản CUỐI CÙNG, và vẫn phải soi cột của bản cuối đó (đừng vì viết lại sạch mà cho qua).
 - Một câu có nhiều ý (a, b, ...): chấm RIÊNG từng ý và cộng lại. Ý nào đặt tính sai thì ý đó 0 điểm, ý đúng vẫn được điểm của ý đó. (Ví dụ câu 1 điểm có ý a và b, mỗi ý 0,5đ: a đúng + b đặt tính sai → 0,5 điểm.)
 - Phép nhân/chia nhiều bước: phải có các bước trung gian hợp lý; thiếu bước hoặc bước sai thì trừ điểm dù kết quả cuối đúng.
 - Chỉ cho điểm tối đa của ý khi CẢ cách làm lẫn kết quả đều đúng.`;
