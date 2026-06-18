@@ -311,10 +311,10 @@
       <div class="row">
         <div><label>Mô hình</label>
           <select id="model">
-            <option value="gemini-3.5-flash">gemini-3.5-flash (đọc hình kỹ)</option>
-            <option value="gemini-3.1-flash-lite" selected>gemini-3.1-flash-lite (nhanh)</option>
-            <option value="gemini-3-flash">gemini-3-flash</option>
-            <option value="gemini-2.5-flash">gemini-2.5-flash (free)</option>
+            <option value="gemini-3.1-flash-lite" selected>gemini-3.1-flash-lite (nhanh, ổn định, miễn phí)</option>
+            <option value="gemini-3-flash-preview">gemini-3-flash-preview (đọc hình kỹ hơn, vẫn miễn phí)</option>
+            <option value="gemini-3.5-flash">gemini-3.5-flash (mới nhất, gói free hay nghẽn 503)</option>
+            <option value="gemini-3.1-pro-preview">gemini-3.1-pro (mạnh nhất, KHÔNG có gói free)</option>
           </select>
         </div>
         <div><label>Nghỉ giữa bài (giây)</label><input type="number" id="delay" value="1.2" step="0.2" min="0"></div>
@@ -322,7 +322,7 @@
       <button class="btn-soft btn-sm" style="margin-top:8px" onclick="fetchModels()">Kiểm tra key &amp; tải thêm model</button>
       <div id="modelMsg" class="note" style="margin-top:8px"></div>
       <p class="note">Lấy key miễn phí tại aistudio.google.com. Điểm và ảnh lưu offline trong máy.</p>
-      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-E</div></div>
+      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-I</div></div>
     </div>
   </div>
 </div>
@@ -454,7 +454,7 @@ CHỈ trả JSON, không kèm chữ nào khác:
       type:['tn','dien','so','tl'].includes(c.loai)?c.loai:'tl',
       answer:(c.dap_an||'').toString().trim(),points:Math.max(0,parseFloat(c.diem)||0),warn:(c.canh_bao||'').toString().trim()}));
     renderKeyTable();saveAnswerKey();toast('Đã đọc xong đáp án');
-  }catch(e){toast('Lỗi: '+e.message);}
+  }catch(e){toast('Lỗi: '+friendlyErr(e.message));}
   btn.disabled=false;btn.textContent='Đọc lại đáp án';
 }
 const TYPE_LABEL={tn:'Trắc nghiệm',dien:'Điền khuyết',so:'Đáp số',tl:'Tự luận',auto:'Tự chấm'};
@@ -545,23 +545,55 @@ async function fetchModels(){
 }
 let AUTH_MODE=null; // 'key' = x-goog-api-key | 'bearer' = Authorization Bearer
 async function gemFetch(url,opt){
-  const key=getKey();const modes=AUTH_MODE?[AUTH_MODE]:['key','bearer'];let last=null,lastTxt='';
+  const key=getKey();const modes=AUTH_MODE?[AUTH_MODE]:['key','bearer'];let lastStatus=0,lastTxt='';
   for(const m of modes){
     const headers=Object.assign({},opt.headers||{});
     if(m==='key')headers['x-goog-api-key']=key; else headers['Authorization']='Bearer '+key;
-    const resp=await fetch(url,Object.assign({},opt,{headers}));
-    if(resp.ok){AUTH_MODE=m;return resp;}
-    last=resp;lastTxt=await resp.text();
-    if(resp.status!==400&&resp.status!==401&&resp.status!==403)break; // lỗi khác thì thôi, không thử cách kia
+    for(let attempt=0;attempt<4;attempt++){
+      let resp;
+      try{resp=await fetch(url,Object.assign({},opt,{headers}));}
+      catch(netErr){lastStatus=0;lastTxt=netErr.message;break;}
+      if(resp.ok){AUTH_MODE=m;return resp;}
+      lastStatus=resp.status;lastTxt=await resp.text();
+      if((resp.status===503||resp.status===429||resp.status===500)&&attempt<3){await sleep(2000*(attempt+1));continue;} // quá tải -> chờ rồi thử lại
+      break;
+    }
+    if(lastStatus!==400&&lastStatus!==401&&lastStatus!==403)break; // không phải lỗi xác thực -> không thử cách kia
   }
-  const e=new Error(`HTTP ${last?last.status:'?'}: ${lastTxt.slice(0,160)}`);e._txt=lastTxt;throw e;
+  const e=new Error(`HTTP ${lastStatus}: ${lastTxt.slice(0,160)}`);e._txt=lastTxt;e._status=lastStatus;throw e;
+}
+function friendlyErr(msg){
+  if(/503|high demand|overload/i.test(msg))return 'Model đang quá tải (Google). Thử lại sau ít phút, hoặc đổi sang gemini-3.1-flash-lite.';
+  if(/429|quota|rate/i.test(msg))return 'Đã hết lượt dùng tạm thời (rate limit). Chờ một lát rồi thử lại.';
+  return msg;
 }
 async function geminiRaw(parts){
   const model=document.getElementById('model').value.trim()||'gemini-3.1-flash-lite';
+  if(/gemini-3\.5/i.test(model))return await geminiInteractions(model,parts); // 3.5 dùng cổng mới (tránh 503 đường cũ)
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-  const resp=await gemFetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts}],generationConfig:{temperature:0,responseMimeType:"application/json"}})});
+  const gc={responseMimeType:"application/json"};
+  if(!/gemini-3/i.test(model))gc.temperature=0; // Gemini 3.x: để mặc định 1.0 (Google khuyến nghị, đặt 0 dễ gây lặp/giảm chất lượng)
+  if(/gemini-3-flash|pro/i.test(model)){gc.thinkingConfig={thinkingLevel:"low"};gc.maxOutputTokens=16384;gc.mediaResolution="MEDIA_RESOLUTION_HIGH";} // đọc kỹ chữ/cột số
+  const resp=await gemFetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts}],generationConfig:gc})});
   const data=await resp.json();
-  return (data.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('');
+  const cand=data.candidates&&data.candidates[0];
+  const text=(cand?.content?.parts||[]).map(p=>p.text||'').join('');
+  if(!text){const fr=(cand&&cand.finishReason)||(data.promptFeedback&&data.promptFeedback.blockReason)||'không rõ';throw new Error('mô hình không trả nội dung (lý do: '+fr+')');}
+  return text;
+}
+async function geminiInteractions(model,parts){
+  const url='https://generativelanguage.googleapis.com/v1beta/interactions';
+  const input=parts.map(p=> p.text!=null
+    ? {type:"text",text:p.text}
+    : {type:"image",data:p.inline_data.data,mime_type:p.inline_data.mime_type});
+  const body=JSON.stringify({model,input,generation_config:{thinking_level:"low",media_resolution:"MEDIA_RESOLUTION_HIGH"}});
+  const resp=await gemFetch(url,{method:'POST',headers:{'Content-Type':'application/json','Api-Revision':'2026-05-20'},body});
+  const data=await resp.json();
+  let text=data.output_text||'';
+  if(!text&&Array.isArray(data.steps))text=data.steps.flatMap(s=>s.content||[]).map(c=>c.text||'').join('');
+  if(!text&&Array.isArray(data.output))text=data.output.flatMap(o=>o.content||[o]).map(c=>c.text||'').join('');
+  if(!text){throw new Error('mô hình không trả nội dung (interactions: '+(data.status||'không rõ')+')');}
+  return text;
 }
 const MATH_RULES=`QUY TẮC CHẤM TOÁN (rất quan trọng, phải tuân thủ nghiêm):
 - Chấm theo CÁCH LÀM, không chỉ nhìn đáp số. Đáp số đúng nhưng cách làm sai thì KHÔNG cho điểm (nhiều khả năng chép).
@@ -673,7 +705,7 @@ async function runGrading(fid){
         const paper={id:'p'+Date.now()+Math.random().toString(36).slice(2,5),folderId:fid,name:nm,score:g.score,details:g.details,imgs,createdAt:Date.now()};
         await idbPut('papers',paper);PAPERS.push(paper);ok=true;done++;log(`✓ ${nm} — ${g.score}đ`);
       }catch(e){lastErr=e;if(a===0)await sleep(800);}}
-    if(!ok){lastErrMsg=lastErr.message;log(`✗ Lỗi: ${lastErr.message}`,true);}
+    if(!ok){lastErrMsg=friendlyErr(lastErr.message);log(`✗ Lỗi: ${lastErrMsg}`,true);}
     if(i<total-1)await sleep(delay);}
   setProg(1);renderFolderCards();
   document.getElementById('progWrap').style.display='none';
