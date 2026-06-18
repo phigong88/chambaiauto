@@ -322,7 +322,7 @@
       <button class="btn-soft btn-sm" style="margin-top:8px" onclick="fetchModels()">Kiểm tra key &amp; tải thêm model</button>
       <div id="modelMsg" class="note" style="margin-top:8px"></div>
       <p class="note">Lấy key miễn phí tại aistudio.google.com. Điểm và ảnh lưu offline trong máy.</p>
-      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-C</div></div>
+      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-D</div></div>
     </div>
   </div>
 </div>
@@ -530,24 +530,36 @@ async function fetchModels(){
   if(!getKey()){if(st){st.textContent='Hãy nhập key trước.';st.style.color='var(--pen)';}return;}
   if(st){st.textContent='Đang kiểm tra key...';st.style.color='var(--muted)';}
   try{
-    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models',{headers:{'x-goog-api-key':getKey()}});
-    const txt=await r.text();
-    if(!r.ok){let msg=txt;try{msg=JSON.parse(txt).error.message;}catch(e){}
-      if(st){st.textContent='✗ Google báo: '+msg;st.style.color='var(--pen)';}return;}
-    const data=JSON.parse(txt);
+    const r=await gemFetch('https://generativelanguage.googleapis.com/v1beta/models',{method:'GET',headers:{}});
+    const data=JSON.parse(await r.text());
     const all=(data.models||[]).map(m=>m.name.split('/').pop())
       .filter(id=>/gemini/i.test(id)&&!/embedding|aqa|image|tts|live|robot|audio|veo|imagen/i.test(id));
     const sel=document.getElementById('model');const cur=sel.value;
     sel.innerHTML='';all.forEach(id=>{const o=document.createElement('option');o.value=id;o.textContent=id;sel.appendChild(o);});
     if(all.includes(cur))sel.value=cur;
     if(st){st.textContent='✓ Key dùng được — đã tải '+all.length+' model, chọn ở ô Mô hình.';st.style.color='var(--ok)';}
-  }catch(e){if(st){st.textContent='Lỗi mạng: '+e.message;st.style.color='var(--pen)';}}
+  }catch(e){
+    let msg=e.message;try{msg=JSON.parse(e._txt).error.message;}catch(_){}
+    if(st){st.textContent='✗ Google báo: '+msg;st.style.color='var(--pen)';}
+  }
+}
+let AUTH_MODE=null; // 'key' = x-goog-api-key | 'bearer' = Authorization Bearer
+async function gemFetch(url,opt){
+  const key=getKey();const modes=AUTH_MODE?[AUTH_MODE]:['key','bearer'];let last=null,lastTxt='';
+  for(const m of modes){
+    const headers=Object.assign({},opt.headers||{});
+    if(m==='key')headers['x-goog-api-key']=key; else headers['Authorization']='Bearer '+key;
+    const resp=await fetch(url,Object.assign({},opt,{headers}));
+    if(resp.ok){AUTH_MODE=m;return resp;}
+    last=resp;lastTxt=await resp.text();
+    if(resp.status!==400&&resp.status!==401&&resp.status!==403)break; // lỗi khác thì thôi, không thử cách kia
+  }
+  const e=new Error(`HTTP ${last?last.status:'?'}: ${lastTxt.slice(0,160)}`);e._txt=lastTxt;throw e;
 }
 async function geminiRaw(parts){
   const model=document.getElementById('model').value.trim()||'gemini-3.1-flash-lite';
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-  const resp=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':getKey()},body:JSON.stringify({contents:[{parts}],generationConfig:{temperature:0,responseMimeType:"application/json"}})});
-  if(!resp.ok)throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0,140)}`);
+  const resp=await gemFetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts}],generationConfig:{temperature:0,responseMimeType:"application/json"}})});
   const data=await resp.json();
   return (data.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('');
 }
