@@ -321,7 +321,7 @@
       <button class="btn-soft btn-sm" style="margin-top:8px" onclick="fetchModels()">Kiểm tra key &amp; tải thêm model</button>
       <div id="modelMsg" class="note" style="margin-top:8px"></div>
       <p class="note">Lấy key miễn phí tại aistudio.google.com. Điểm và ảnh lưu offline trong máy.</p>
-      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-L</div></div>
+      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-M</div></div>
     </div>
   </div>
 </div>
@@ -340,6 +340,12 @@
       <p class="note" style="margin-top:-4px">Chạm vào ảnh để phóng to.</p>
       <div style="margin-bottom:10px"><label>Tên học sinh</label><input type="text" id="mName"></div>
       <div id="mQedit"></div>
+      <div class="qblock" style="margin-top:14px">
+        <label style="font-weight:650">Chấm lại bài này (khi AI chấm sai / sót đặt tính)</label>
+        <textarea id="mRegradeNote" placeholder="VD: Soi thật kỹ đặt tính câu 10b, nếu lệch cột thì trừ điểm ý đó. Câu 5 đáp án đúng là D." style="min-height:54px;margin-top:6px"></textarea>
+        <button class="btn-primary btn-sm" id="mRegradeBtn" style="margin-top:8px;width:100%" onclick="regradeCurrent()">Chấm lại bài này</button>
+        <p class="note">AI đọc lại ảnh và chấm lại theo yêu cầu trên; điểm và dấu chấm sẽ cập nhật. Để trống ô trên cũng được — AI vẫn chấm lại từ đầu.</p>
+      </div>
       <div class="res-head" style="margin-top:14px"><span>Điểm: <b id="mScore" class="sc">0</b></span>
         <button class="btn-ghost btn-sm" style="margin-left:auto;color:var(--pen)" onclick="deleteCurrent()">Xoá bài này</button></div>
     </div>
@@ -612,8 +618,10 @@ Với MỖI câu:
 Đọc tên học sinh nếu thấy.
 CHỈ trả JSON: {"ten_hoc_sinh":"","cac_cau":[{"cau":1,"tra_loi":"","diem_dat":null,"ly_do":"","trang":1,"vi_tri":[0,0,0,0]}]}`;
 }
-async function callGrade(pages){
-  const parts=[{text:MODE==='auto'?buildAutoPrompt(pages.length):buildGradePrompt(pages.length)}];
+async function callGrade(pages,extraNote){
+  let prompt=MODE==='auto'?buildAutoPrompt(pages.length):buildGradePrompt(pages.length);
+  if(extraNote)prompt+=`\n\n*** YÊU CẦU CHẤM LẠI TỪ GIÁO VIÊN (ưu tiên CAO NHẤT, bắt buộc tuân theo, ghi đè mọi suy đoán trước đó): ${extraNote} ***\n`;
+  const parts=[{text:prompt}];
   pages.forEach(f=>parts.push({inline_data:{mime_type:f.mime,data:f.base64}}));
   return safeJSON(await geminiRaw(parts));
 }
@@ -865,6 +873,23 @@ function editPts(j,val){const d=paperById(currentPaperId).details[j];let p=parse
 function recalcModal(){const p=paperById(currentPaperId);p.score=round2(p.details.reduce((s,d)=>s+d.earned,0));
   const el=document.getElementById('mScore');el.textContent=p.score;el.className='sc '+(p.score>=8?'hi':p.score>=5?'mid':'lo');}
 async function saveReview(){const p=paperById(currentPaperId);p.name=document.getElementById('mName').value.trim()||p.name;await idbPut('papers',p);renderPapers();closeModal();toast('Đã lưu');}
+async function regradeCurrent(){
+  const p=paperById(currentPaperId);if(!p)return;
+  const btn=document.getElementById('mRegradeBtn');const note=document.getElementById('mRegradeNote').value.trim();
+  btn.disabled=true;const old=btn.textContent;btn.textContent='Đang chấm lại...';
+  try{
+    const blobs=getPages(p);if(!blobs.length)throw new Error('không còn ảnh bài để chấm lại');
+    const pages=[];for(const b of blobs)pages.push({mime:b.type||'image/jpeg',base64:await blobToB64(b)});
+    const reading=await callGrade(pages,note);
+    if(!reading||!reading.cac_cau||!reading.cac_cau.length)throw new Error('mô hình trả về rỗng');
+    const g=gradeOne(reading);
+    p.score=g.score;p.details=g.details;
+    await idbPut('papers',p);
+    await openReview(p.id);
+    toast('Đã chấm lại xong');
+  }catch(e){toast('Lỗi: '+friendlyErr(e.message));}
+  const b2=document.getElementById('mRegradeBtn');if(b2){b2.disabled=false;b2.textContent='Chấm lại bài này';}
+}
 async function deleteCurrent(){if(!confirm('Xoá bài này?'))return;await idbDel('papers',currentPaperId);PAPERS=PAPERS.filter(p=>p.id!==currentPaperId);renderPapers();closeModal();toast('Đã xoá');}
 function closeModal(){document.getElementById('modalBg').classList.remove('show');document.body.style.overflow='';clearObjUrls();}
 
