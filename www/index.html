@@ -311,10 +311,9 @@
       <div class="row">
         <div><label>Mô hình</label>
           <select id="model">
-            <option value="gemini-3.1-flash-lite" selected>gemini-3.1-flash-lite (nhanh, ổn định, miễn phí)</option>
-            <option value="gemini-3-flash-preview">gemini-3-flash-preview (đọc hình kỹ hơn, vẫn miễn phí)</option>
-            <option value="gemini-3.5-flash">gemini-3.5-flash (mới nhất, gói free hay nghẽn 503)</option>
-            <option value="gemini-3.1-pro-preview">gemini-3.1-pro (mạnh nhất, KHÔNG có gói free)</option>
+            <option value="gemini-3-flash-preview" selected>Gemini 3 Preview (đọc kỹ, chấm đặt tính tốt nhất)</option>
+            <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (nhanh, chấm số lượng lớn)</option>
+            <option value="gemini-3.5-flash">Gemini 3.5 Flash (mới nhất, gói free hay nghẽn)</option>
           </select>
         </div>
         <div><label>Nghỉ giữa bài (giây)</label><input type="number" id="delay" value="1.2" step="0.2" min="0"></div>
@@ -322,7 +321,7 @@
       <button class="btn-soft btn-sm" style="margin-top:8px" onclick="fetchModels()">Kiểm tra key &amp; tải thêm model</button>
       <div id="modelMsg" class="note" style="margin-top:8px"></div>
       <p class="note">Lấy key miễn phí tại aistudio.google.com. Điểm và ảnh lưu offline trong máy.</p>
-      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-I</div></div>
+      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-J</div></div>
     </div>
   </div>
 </div>
@@ -394,7 +393,7 @@ function idbClear(s){return new Promise((res,rej)=>{const r=st(s,'readwrite').cl
 /* ===================== KHỞI ĐỘNG ===================== */
 window.addEventListener('load',async()=>{
   try{await openDB();}catch(e){alert('Không mở được bộ nhớ máy.');}
-  try{const cfg=await idbGet('settings','config');if(cfg){apiKeyEl().value=cfg.apiKey||'';setModelValue(cfg.model||'gemini-3.1-flash-lite');document.getElementById('delay').value=cfg.delay||'1.2';}}catch(e){}
+  try{const cfg=await idbGet('settings','config');if(cfg){apiKeyEl().value=cfg.apiKey||'';setModelValue(cfg.model||'gemini-3-flash-preview');document.getElementById('delay').value=cfg.delay||'1.2';}}catch(e){}
   try{const ak=await idbGet('settings','answerkey');if(ak){KEYIMAGES=ak.images||[];KEYDATA=ak.keydata||[];document.getElementById('notes').value=ak.notes||'';MODE=ak.mode||'key';if(ak.totalPoints)document.getElementById('totalPoints').value=ak.totalPoints;}}catch(e){}
   applyMode();
   renderKeyThumbs();renderKeyTable();
@@ -568,31 +567,16 @@ function friendlyErr(msg){
   return msg;
 }
 async function geminiRaw(parts){
-  const model=document.getElementById('model').value.trim()||'gemini-3.1-flash-lite';
-  if(/gemini-3\.5/i.test(model))return await geminiInteractions(model,parts); // 3.5 dùng cổng mới (tránh 503 đường cũ)
+  const model=document.getElementById('model').value.trim()||'gemini-3-flash-preview';
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   const gc={responseMimeType:"application/json"};
-  if(!/gemini-3/i.test(model))gc.temperature=0; // Gemini 3.x: để mặc định 1.0 (Google khuyến nghị, đặt 0 dễ gây lặp/giảm chất lượng)
-  if(/gemini-3-flash|pro/i.test(model)){gc.thinkingConfig={thinkingLevel:"low"};gc.maxOutputTokens=16384;gc.mediaResolution="MEDIA_RESOLUTION_HIGH";} // đọc kỹ chữ/cột số
+  if(!/gemini-3/i.test(model))gc.temperature=0; // Gemini 3.x: để mặc định 1.0 (Google khuyến nghị)
+  if(/gemini-3-flash|gemini-3\.5/i.test(model)){gc.thinkingConfig={thinkingLevel:"high"};gc.maxOutputTokens=32768;gc.mediaResolution="MEDIA_RESOLUTION_HIGH";} // suy nghĩ kỹ + đọc nét chữ/cột số để bắt đặt tính lệch
   const resp=await gemFetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts}],generationConfig:gc})});
   const data=await resp.json();
   const cand=data.candidates&&data.candidates[0];
   const text=(cand?.content?.parts||[]).map(p=>p.text||'').join('');
   if(!text){const fr=(cand&&cand.finishReason)||(data.promptFeedback&&data.promptFeedback.blockReason)||'không rõ';throw new Error('mô hình không trả nội dung (lý do: '+fr+')');}
-  return text;
-}
-async function geminiInteractions(model,parts){
-  const url='https://generativelanguage.googleapis.com/v1beta/interactions';
-  const input=parts.map(p=> p.text!=null
-    ? {type:"text",text:p.text}
-    : {type:"image",data:p.inline_data.data,mime_type:p.inline_data.mime_type});
-  const body=JSON.stringify({model,input,generation_config:{thinking_level:"low",media_resolution:"MEDIA_RESOLUTION_HIGH"}});
-  const resp=await gemFetch(url,{method:'POST',headers:{'Content-Type':'application/json','Api-Revision':'2026-05-20'},body});
-  const data=await resp.json();
-  let text=data.output_text||'';
-  if(!text&&Array.isArray(data.steps))text=data.steps.flatMap(s=>s.content||[]).map(c=>c.text||'').join('');
-  if(!text&&Array.isArray(data.output))text=data.output.flatMap(o=>o.content||[o]).map(c=>c.text||'').join('');
-  if(!text){throw new Error('mô hình không trả nội dung (interactions: '+(data.status||'không rõ')+')');}
   return text;
 }
 const MATH_RULES=`QUY TẮC CHẤM TOÁN (rất quan trọng, phải tuân thủ nghiêm):
