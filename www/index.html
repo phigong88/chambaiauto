@@ -322,7 +322,7 @@
       <button class="btn-soft btn-sm" style="margin-top:8px" onclick="fetchModels()">Kiểm tra key &amp; tải thêm model</button>
       <div id="modelMsg" class="note" style="margin-top:8px"></div>
       <p class="note">Lấy key miễn phí tại aistudio.google.com. Điểm và ảnh lưu offline trong máy.</p>
-      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-D</div></div>
+      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-E</div></div>
     </div>
   </div>
 </div>
@@ -657,25 +657,36 @@ function startGrading(){
 }
 async function runGrading(fid){
   const btn=document.getElementById('gradeBtn');btn.disabled=true;
+  showTab('cham');
   document.getElementById('progWrap').style.display='block';document.getElementById('log').innerHTML='';
   const delay=(parseFloat(document.getElementById('delay').value)||1)*1000;
-  const students=studentsWithPages();const total=students.length;
+  const students=studentsWithPages();const total=students.length;let done=0,lastErrMsg='';
   for(let i=0;i<total;i++){const stu=students[i];setProg(i/total);btn.textContent=`Đang chấm ${i+1}/${total}...`;
     log(`(${i+1}/${total}) đang đọc ${stu.pages.length} trang...`);
     let ok=false,lastErr=null;
     for(let a=0;a<2&&!ok;a++){
-      try{const reading=await callGrade(stu.pages);const g=gradeOne(reading);
+      try{const reading=await callGrade(stu.pages);
+        if(!reading||!reading.cac_cau||!reading.cac_cau.length)throw new Error('mô hình trả về rỗng (model này có thể không dùng được với key của bạn)');
+        const g=gradeOne(reading);
         const imgs=[];for(const pg of stu.pages)imgs.push(await dataUrlToBlob(pg.dataUrl));
         const nm=(stu.name||'').trim()||(reading.ten_hoc_sinh||'').trim()||`Bài ${PAPERS.length+1}`;
         const paper={id:'p'+Date.now()+Math.random().toString(36).slice(2,5),folderId:fid,name:nm,score:g.score,details:g.details,imgs,createdAt:Date.now()};
-        await idbPut('papers',paper);PAPERS.push(paper);ok=true;log(`✓ ${nm} — ${g.score}đ`);
+        await idbPut('papers',paper);PAPERS.push(paper);ok=true;done++;log(`✓ ${nm} — ${g.score}đ`);
       }catch(e){lastErr=e;if(a===0)await sleep(800);}}
-    if(!ok)log(`✗ Lỗi: ${lastErr.message}`,true);
+    if(!ok){lastErrMsg=lastErr.message;log(`✗ Lỗi: ${lastErr.message}`,true);}
     if(i<total-1)await sleep(delay);}
-  setProg(1);PENDING=[];activeStu=-1;renderPending();renderFolderCards();
-  document.getElementById('progWrap').style.display='none';toast('Đã chấm xong');
+  setProg(1);renderFolderCards();
+  document.getElementById('progWrap').style.display='none';
+  if(done===0){
+    btn.disabled=false;updateReady();
+    log('Không chấm được bài nào. Hãy thử đổi mô hình về gemini-3.1-flash-lite trong Cài đặt.',true);
+    toast('Không chấm được — xem lý do ở khung dưới');
+    return;
+  }
+  PENDING=[];activeStu=-1;renderPending();
   curTab='ketqua';['cham','dapan','ketqua'].forEach(t=>{document.getElementById('panel-'+t).style.display=t==='ketqua'?'block':'none';document.getElementById('tab-'+t).classList.toggle('active',t==='ketqua');});
   openFolderView(fid);updateReady();
+  if(done<total)toast(`Chấm xong ${done}/${total} bài, ${total-done} bài lỗi`);
 }
 function setProg(p){document.getElementById('progBar').style.width=Math.round(p*100)+'%';}
 function log(m,e){const l=document.getElementById('log');l.innerHTML+=`<div class="${e?'err':''}">${escHtml(m)}</div>`;l.scrollTop=l.scrollHeight;}
