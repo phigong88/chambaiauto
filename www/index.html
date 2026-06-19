@@ -329,7 +329,7 @@
       <button class="btn-soft btn-sm" style="margin-top:8px" onclick="fetchModels()">Kiểm tra key &amp; tải thêm model</button>
       <div id="modelMsg" class="note" style="margin-top:8px"></div>
       <p class="note">Lấy key miễn phí tại aistudio.google.com. Điểm và ảnh lưu offline trong máy.</p>
-      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-S</div></div>
+      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-T</div></div>
     </div>
   </div>
 </div>
@@ -739,9 +739,10 @@ function annotatePage(imgSrc,details,score,pageNum,withStamp){
           ctx.fillStyle='#a9781a';ctx.font=`700 ${u*.55}px Arial`;ctx.fillText(d.earned+'/'+d.points,rx,y);}
         else{ctx.strokeStyle='#c0382f';ctx.fillStyle='#c0382f';ctx.beginPath();ctx.moveTo(x-u*.3,y-u*.3);ctx.lineTo(x+u*.3,y+u*.3);ctx.moveTo(x+u*.3,y-u*.3);ctx.lineTo(x-u*.3,y+u*.3);ctx.stroke();
           if(d.correct&&d.type!=='tl'){ctx.font=`700 ${u*.55}px Arial`;ctx.fillText('→'+d.correct,rx,y);}}});
-      if(withStamp){const padX=u*1.6,padY=u*0.9,bw=u*4.2,bh=u*1.9;ctx.fillStyle='rgba(255,255,255,.82)';roundRect(ctx,W-bw-padX,padY,bw,bh,u*.3);ctx.fill();
-        ctx.strokeStyle='#c0382f';ctx.lineWidth=Math.max(2,u/8);roundRect(ctx,W-bw-padX,padY,bw,bh,u*.3);ctx.stroke();
-        ctx.fillStyle='#c0382f';ctx.textAlign='center';ctx.font=`800 ${u*1.15}px Arial`;ctx.fillText('Điểm: '+score,W-bw/2-padX,padY+bh*.5);ctx.textAlign='start';}
+      if(withStamp){const padX=u*1.2,padY=u*1.3;ctx.font=`800 ${u*1.25}px Arial`;ctx.textAlign='right';ctx.textBaseline='middle';
+        ctx.lineWidth=Math.max(3,u/4);ctx.strokeStyle='rgba(255,255,255,.92)';ctx.strokeText('Điểm: '+score,W-padX,padY);
+        ctx.fillStyle='#c0382f';ctx.fillText('Điểm: '+score,W-padX,padY);
+        ctx.textAlign='start';ctx.textBaseline='alphabetic';}
       res(c.toDataURL('image/jpeg',.92));};
     img.src=imgSrc;});
 }
