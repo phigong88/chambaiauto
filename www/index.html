@@ -52,7 +52,7 @@
   label{font-size:12.5px;font-weight:650;color:var(--ink);display:block;margin-bottom:6px}
   input[type=text],input[type=password],input[type=number],select,textarea{
     width:100%;padding:11px 12px;border:1px solid var(--hair);border-radius:12px;font-size:15px;font-family:inherit;
-    background:var(--field);color:var(--ink);backdrop-filter:blur(4px)}
+    background:var(--field);color:var(--ink)}
   input::placeholder,textarea::placeholder{color:var(--faint)}
   input:focus,select:focus,textarea:focus{outline:none;border-color:var(--slate);background:rgba(255,255,255,.8);box-shadow:0 0 0 3px rgba(58,86,108,.12)}
   input.warn-field{border-color:var(--warn);background:rgba(169,120,26,.08)}
@@ -246,7 +246,10 @@
       <div id="modeAuto" style="display:none">
         <p class="desc" style="margin-top:12px">Không cần tải đáp án. Phần mềm tự đọc đề trong bài làm, tự tìm đáp án đúng và chấm. Phù hợp khi không có sẵn tờ đáp án. Bạn nên xem lại điểm ở từng bài cho chắc.</p>
         <label>Tổng điểm toàn bài</label>
-        <input type="number" id="totalPoints" value="10" step="0.5" min="1" style="max-width:120px" oninput="saveAnswerKey()">
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="text" inputmode="decimal" id="totalPoints" value="10" style="max-width:120px" oninput="saveAnswerKey()">
+          <button class="btn-soft btn-sm" type="button" onclick="var e=document.getElementById('totalPoints');e.value='';e.focus();saveAnswerKey()">Xoá</button>
+        </div>
       </div>
 
       <div style="margin-top:16px">
@@ -307,7 +310,11 @@
     <div class="modal-head"><h3 style="flex:1">Cài đặt</h3>
       <button class="btn-primary btn-sm" onclick="saveConfig();closeSettings();toast('Đã lưu')">Lưu &amp; đóng</button></div>
     <div class="modal-body">
-      <div style="margin-bottom:13px"><label>Gemini API Key</label><input type="password" id="apiKey" placeholder="Dán key (AIza... hoặc AQ...)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="ck-no-fill" data-form-type="other">
+      <div style="margin-bottom:13px"><label>Gemini API Key</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="password" id="apiKey" placeholder="Dán key (AIza... hoặc AQ...)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="ck-no-fill" data-form-type="other" style="flex:1">
+          <button class="btn-soft btn-sm" type="button" onclick="var e=document.getElementById('apiKey');e.value='';e.focus()">Xoá</button>
+        </div>
         <p class="note" style="margin-top:5px">Lấy Key miễn phí: vào <b>aistudio.google.com/apikey</b> → đăng nhập Google → bấm <b>Create API key</b> → sao chép rồi dán vào ô trên.</p></div>
       <div class="row">
         <div><label>Mô hình</label>
@@ -322,7 +329,7 @@
       <button class="btn-soft btn-sm" style="margin-top:8px" onclick="fetchModels()">Kiểm tra key &amp; tải thêm model</button>
       <div id="modelMsg" class="note" style="margin-top:8px"></div>
       <p class="note">Lấy key miễn phí tại aistudio.google.com. Điểm và ảnh lưu offline trong máy.</p>
-      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-Q</div></div>
+      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-R</div></div>
     </div>
   </div>
 </div>
