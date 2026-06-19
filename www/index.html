@@ -322,7 +322,7 @@
       <button class="btn-soft btn-sm" style="margin-top:8px" onclick="fetchModels()">Kiểm tra key &amp; tải thêm model</button>
       <div id="modelMsg" class="note" style="margin-top:8px"></div>
       <p class="note">Lấy key miễn phí tại aistudio.google.com. Điểm và ảnh lưu offline trong máy.</p>
-      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-O</div></div>
+      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-P</div></div>
     </div>
   </div>
 </div>
@@ -549,27 +549,24 @@ async function fetchModels(){
     if(st){st.textContent='✗ Google báo: '+msg;st.style.color='var(--pen)';}
   }
 }
-let AUTH_MODE=null; // 'key' = x-goog-api-key | 'bearer' = Authorization Bearer
 async function gemFetch(url,opt){
-  const key=getKey();const modes=AUTH_MODE?[AUTH_MODE]:['key','bearer'];let lastStatus=0,lastTxt='';
-  for(const m of modes){
-    const headers=Object.assign({},opt.headers||{});
-    if(m==='key')headers['x-goog-api-key']=key; else headers['Authorization']='Bearer '+key;
-    for(let attempt=0;attempt<4;attempt++){
-      let resp;
-      try{resp=await fetch(url,Object.assign({},opt,{headers}));}
-      catch(netErr){lastStatus=0;lastTxt=netErr.message;break;}
-      if(resp.ok){AUTH_MODE=m;return resp;}
-      lastStatus=resp.status;lastTxt=await resp.text();
-      if((resp.status===503||resp.status===429||resp.status===500)&&attempt<3){await sleep(2000*(attempt+1));continue;} // quá tải -> chờ rồi thử lại
-      break;
-    }
-    if(lastStatus!==400&&lastStatus!==401&&lastStatus!==403)break; // không phải lỗi xác thực -> không thử cách kia
+  const key=getKey();let lastStatus=0,lastTxt='';
+  const headers=Object.assign({},opt.headers||{});headers['x-goog-api-key']=key;
+  for(let attempt=0;attempt<4;attempt++){
+    let resp;
+    try{resp=await fetch(url,Object.assign({},opt,{headers}));}
+    catch(netErr){lastStatus=0;lastTxt=netErr.message;break;}
+    if(resp.ok)return resp;
+    lastStatus=resp.status;lastTxt=await resp.text();
+    if((resp.status===503||resp.status===429||resp.status===500)&&attempt<3){await sleep(2000*(attempt+1));continue;} // quá tải -> chờ rồi thử lại
+    break;
   }
   const e=new Error(`HTTP ${lastStatus}: ${lastTxt.slice(0,160)}`);e._txt=lastTxt;e._status=lastStatus;throw e;
 }
 function friendlyErr(msg){
-  if(/503|high demand|overload/i.test(msg))return 'Model đang quá tải (Google). Thử lại sau ít phút, hoặc đổi sang gemini-3.1-flash-lite.';
+  if(/API key not valid|API_KEY_INVALID|invalid authentication|Expected OAuth|401|403|PERMISSION_DENIED|unregistered/i.test(msg))
+    return 'Key không hợp lệ hoặc đã hết hạn. Hãy tạo key mới tại aistudio.google.com/apikey, dán vào Cài đặt rồi bấm "Kiểm tra key & tải thêm model".';
+  if(/503|high demand|overload/i.test(msg))return 'Model đang quá tải (Google). Thử lại sau ít phút, hoặc đổi sang Gemini 3.1 Flash-Lite.';
   if(/429|quota|rate/i.test(msg))return 'Đã hết lượt dùng tạm thời (rate limit). Chờ một lát rồi thử lại.';
   return msg;
 }
