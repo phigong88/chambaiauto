@@ -208,8 +208,6 @@
   <div id="panel-cham">
     <div class="card glass">
       <h2>Chụp bài làm</h2>
-      <p class="desc">Mỗi học sinh có thể nhiều trang. Chụp đủ các trang của một em rồi bấm “＋ Học sinh tiếp theo”.</p>
-      <button class="folder-chip" id="folderChip" onclick="showTab('ketqua')"></button>
       <div class="cap-row">
         <button class="cap-btn primary" onclick="document.getElementById('camInput').click()" aria-label="Chụp trang">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5h3L8.4 6h7.2L17 8.5h3a1 1 0 0 1 1 1v8.5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13" r="3.1"/></svg></button>
@@ -331,7 +329,7 @@
       <button class="btn-soft btn-sm" style="margin-top:8px" onclick="fetchModels()">Kiểm tra key &amp; tải thêm model</button>
       <div id="modelMsg" class="note" style="margin-top:8px"></div>
       <p class="note">Lấy key miễn phí tại aistudio.google.com. Điểm và ảnh lưu offline trong máy.</p>
-      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.19-A</div></div>
+      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.19-B</div></div>
     </div>
   </div>
 </div>
@@ -355,10 +353,9 @@
         </div></div>
       <div id="mQedit"></div>
       <div class="qblock" style="margin-top:14px">
-        <label style="font-weight:650">Chấm lại bài này (khi AI chấm sai / sót đặt tính)</label>
-        <textarea id="mRegradeNote" placeholder="VD: Soi thật kỹ đặt tính câu 10b, nếu lệch cột thì trừ điểm ý đó. Câu 5 đáp án đúng là D." style="min-height:54px;margin-top:6px"></textarea>
+        <label style="font-weight:650">Chấm lại bài này</label>
+        <textarea id="mRegradeNote" placeholder="Yêu cầu chấm lại (tuỳ chọn)" style="min-height:54px;margin-top:6px"></textarea>
         <button class="btn-primary btn-sm" id="mRegradeBtn" style="margin-top:8px;width:100%" onclick="regradeCurrent()">Chấm lại bài này</button>
-        <p class="note">AI đọc lại ảnh và chấm lại theo yêu cầu trên; điểm và dấu chấm sẽ cập nhật. Để trống ô trên cũng được — AI vẫn chấm lại từ đầu.</p>
       </div>
       <div class="res-head" style="margin-top:14px"><span>Điểm: <b id="mScore" class="sc">0</b></span>
         <button class="btn-ghost btn-sm" style="margin-left:auto;color:var(--pen)" onclick="deleteCurrent()">Xoá bài này</button></div>
@@ -588,7 +585,7 @@ async function geminiRaw(parts){
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   const gc={responseMimeType:"application/json"};
   if(!/gemini-3/i.test(model))gc.temperature=0; // Gemini 3.x: để mặc định 1.0 (Google khuyến nghị)
-  if(/gemini-3-flash|gemini-3\.5/i.test(model)){gc.thinkingConfig={thinkingLevel:"high"};gc.maxOutputTokens=32768;gc.mediaResolution="MEDIA_RESOLUTION_HIGH";} // suy nghĩ kỹ + đọc nét chữ/cột số để bắt đặt tính lệch
+  if(/gemini-3-flash|gemini-3\.5/i.test(model)){gc.thinkingConfig={thinkingLevel:"medium"};gc.maxOutputTokens=24576;gc.mediaResolution="MEDIA_RESOLUTION_HIGH";} // cân bằng tốc độ/độ chính xác
   const resp=await gemFetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts}],generationConfig:gc})});
   const data=await resp.json();
   const cand=data.candidates&&data.candidates[0];
@@ -881,7 +878,7 @@ async function openReview(id){currentPaperId=id;const p=paperById(id);if(!p)retu
         <span class="right">điểm <input type="number" step="0.25" min="0" max="${d.points}" value="${d.earned}" oninput="editPts(${j},this.value)"> /${d.points}</span></div>
       <div class="read"><label style="font-weight:650;color:var(--muted)">Học sinh:</label>${readField}</div>
       ${d.correct&&d.type!=='tl'?`<div class="correct">Đáp án đúng: <b>${escHtml(d.correct)}</b></div>`:''}
-      ${d.reason?`<div class="reason">Gợi ý: ${escHtml(d.reason)}</div>`:''}`;
+      ${(d.reason && !(d.status==='ok'&&(d.type==='tn'||/^[A-Da-d]$/.test((d.correct||'').toString().trim()))))?`<div class="reason">Gợi ý: ${escHtml(d.reason)}</div>`:''}`;
     q.appendChild(blk);});
   recalcModal();document.getElementById('modalBg').classList.add('show');document.body.style.overflow='hidden';
 }
