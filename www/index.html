@@ -329,7 +329,7 @@
       <button class="btn-soft btn-sm" style="margin-top:8px" onclick="fetchModels()">Kiểm tra key &amp; tải thêm model</button>
       <div id="modelMsg" class="note" style="margin-top:8px"></div>
       <p class="note">Lấy key miễn phí tại aistudio.google.com. Điểm và ảnh lưu offline trong máy.</p>
-      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.19-B</div></div>
+      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.19-C</div></div>
     </div>
   </div>
 </div>
@@ -585,7 +585,7 @@ async function geminiRaw(parts){
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   const gc={responseMimeType:"application/json"};
   if(!/gemini-3/i.test(model))gc.temperature=0; // Gemini 3.x: để mặc định 1.0 (Google khuyến nghị)
-  if(/gemini-3-flash|gemini-3\.5/i.test(model)){gc.thinkingConfig={thinkingLevel:"medium"};gc.maxOutputTokens=24576;gc.mediaResolution="MEDIA_RESOLUTION_HIGH";} // cân bằng tốc độ/độ chính xác
+  if(/gemini-3-flash|gemini-3\.5/i.test(model)){gc.thinkingConfig={thinkingLevel:"high"};gc.maxOutputTokens=32768;gc.mediaResolution="MEDIA_RESOLUTION_HIGH";} // suy nghĩ kỹ + đọc nét chữ/cột số để bắt đặt tính lệch
   const resp=await gemFetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts}],generationConfig:gc})});
   const data=await resp.json();
   const cand=data.candidates&&data.candidates[0];
