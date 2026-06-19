@@ -95,6 +95,10 @@
   .folder-card .fc-name{flex:1;font-weight:650;font-size:14.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .folder-card .fc-count{font-size:12.5px;color:var(--muted);font-weight:600;white-space:nowrap}
   .folder-card:active{border-color:var(--pen)}
+  .row-act{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;flex:0 0 34px;color:var(--muted);background:transparent;border:none;cursor:pointer;padding:0}
+  .row-act svg{width:18px;height:18px;color:inherit}
+  .row-act.del{color:var(--pen)}
+  .row-act:active{background:var(--glass-2)}
   .inside-head{display:flex;align-items:center;gap:10px}
   .folder-chip{display:block;width:100%;text-align:left;margin:10px 0 2px;padding:9px 12px;border:1px solid var(--ring);border-radius:11px;background:var(--glass-2);color:var(--muted);font-size:12.5px;font-weight:600}
   .folder-chip b{color:var(--ink)}
@@ -283,8 +287,6 @@
       <div class="res-actions" style="margin-top:8px">
         <button class="btn-ghost btn-sm" onclick="exportDiem()">Xuất điểm</button>
         <button class="btn-ghost btn-sm" onclick="downloadAllImages()">Tải ảnh</button>
-        <button class="btn-ghost btn-sm" id="btnRename" onclick="renameFolder()">Đổi tên</button>
-        <button class="btn-ghost btn-sm" style="color:var(--pen)" onclick="deleteFolder()">Xoá thư mục</button>
       </div>
       <div id="paperList"><div class="empty">Thư mục này chưa có bài nào.</div></div>
     </div>
@@ -329,7 +331,7 @@
       <button class="btn-soft btn-sm" style="margin-top:8px" onclick="fetchModels()">Kiểm tra key &amp; tải thêm model</button>
       <div id="modelMsg" class="note" style="margin-top:8px"></div>
       <p class="note">Lấy key miễn phí tại aistudio.google.com. Điểm và ảnh lưu offline trong máy.</p>
-      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-U</div></div>
+      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.19-A</div></div>
     </div>
   </div>
 </div>
@@ -773,17 +775,19 @@ function renderFolderCards(){
   sorted.forEach(f=>w.appendChild(folderCardEl(f.id,f.name)));
   if(hasOrphans())w.appendChild(folderCardEl('__none__','Chưa phân loại'));
 }
+const ICON_EDIT='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5l4 4M4.5 19.5l4.2-1 9-9-3.2-3.2-9 9-1 4.2Z"/></svg>';
+const ICON_DEL='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6.5 7l.9 12.5h9.2L17.5 7M10 10.5v6M14 10.5v6"/></svg>';
 function folderCardEl(id,name){
-  const b=document.createElement('button');b.className='folder-card';b.onclick=()=>openFolderView(id);
+  const b=document.createElement('div');b.className='folder-card';b.onclick=()=>openFolderView(id);
+  const acts=id==='__none__'?'':`<button class="row-act" title="Đổi tên" onclick="event.stopPropagation();renameFolderById('${id}')">${ICON_EDIT}</button><button class="row-act del" title="Xoá thư mục" onclick="event.stopPropagation();deleteFolderById('${id}')">${ICON_DEL}</button>`;
   b.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.2l1.8 2H18.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-9Z"/></svg>
-    <span class="fc-name">${escHtml(name)}</span><span class="fc-count">${countIn(id)} bài ›</span>`;
+    <span class="fc-name">${escHtml(name)}</span>${acts}<span class="fc-count">${countIn(id)} bài ›</span>`;
   return b;
 }
 function openFolderView(id){curFolder=id;saveFolders();
   document.getElementById('kq-folders').style.display='none';
   document.getElementById('kq-inside').style.display='block';
   document.getElementById('insideTitle').textContent=folderName(id);
-  document.getElementById('btnRename').style.display=(id==='__none__')?'none':'';
   renderPapers();}
 function backToFolders(){
   document.getElementById('kq-inside').style.display='none';
@@ -821,6 +825,24 @@ async function deleteFolder(){
   PAPERS=PAPERS.filter(p=>!ids.includes(p.id));FOLDERS=FOLDERS.filter(x=>x.id!==f.id);curFolder=null;
   await saveFolders();backToFolders();toast('Đã xoá thư mục');
 }
+async function renameFolderById(id){if(id==='__none__'){toast('Không đổi tên mục này');return;}
+  const f=FOLDERS.find(x=>x.id===id);if(!f)return;
+  const name=prompt('Đổi tên thư mục:',f.name);if(name===null)return;
+  f.name=name.trim()||f.name;await saveFolders();renderFolderCards();toast('Đã đổi tên');}
+async function deleteFolderById(id){
+  if(id==='__none__'){if(!confirm('Xoá toàn bộ bài chưa phân loại?'))return;}
+  else{const f=FOLDERS.find(x=>x.id===id);if(!f)return;
+    if(!confirm(`Xoá thư mục “${f.name}” và toàn bộ ${countIn(id)} bài trong đó?`))return;
+    FOLDERS=FOLDERS.filter(x=>x.id!==id);}
+  const ids=PAPERS.filter(p=>inFolder(p,id)).map(p=>p.id);for(const x of ids)await idbDel('papers',x);
+  PAPERS=PAPERS.filter(p=>!ids.includes(p.id));if(curFolder===id)curFolder=null;
+  await saveFolders();renderFolderCards();toast('Đã xoá thư mục');}
+async function renamePaper(id){const p=paperById(id);if(!p)return;
+  const name=prompt('Tên học sinh:',p.name);if(name===null)return;
+  p.name=name.trim()||p.name;await idbPut('papers',p);renderPapers();toast('Đã đổi tên');}
+async function deletePaperById(id){const p=paperById(id);if(!p)return;
+  if(!confirm(`Xoá bài của “${p.name}”?`))return;
+  await idbDel('papers',id);PAPERS=PAPERS.filter(x=>x.id!==id);renderPapers();toast('Đã xoá bài');}
 
 /* ===================== DANH SÁCH BÀI ===================== */
 async function refreshPapers(){PAPERS=await idbAll('papers');renderFolderCards();renderPapers();}
@@ -834,6 +856,8 @@ function renderPapers(){const wrap=document.getElementById('paperList');if(!wrap
     row.innerHTML=`<img class="pic" src="${url}" onclick="openReview('${p.id}')">
       <div class="info" onclick="openReview('${p.id}')"><div class="nm">${i+1}. ${escHtml(p.name)}</div>
         <div class="meta">${correct}/${tot} câu đúng${np} ${part?'· <span class="flag">có câu một phần</span>':''}</div></div>
+      <button class="row-act" title="Sửa tên" onclick="renamePaper('${p.id}')">${ICON_EDIT}</button>
+      <button class="row-act del" title="Xoá bài" onclick="deletePaperById('${p.id}')">${ICON_DEL}</button>
       <div class="sc ${cls}" onclick="openReview('${p.id}')">${p.score}</div>`;
     wrap.appendChild(row);});
   const n=list.length,avg=n?round2(list.reduce((s,p)=>s+p.score,0)/n):0;
