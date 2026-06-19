@@ -322,7 +322,7 @@
       <button class="btn-soft btn-sm" style="margin-top:8px" onclick="fetchModels()">Kiểm tra key &amp; tải thêm model</button>
       <div id="modelMsg" class="note" style="margin-top:8px"></div>
       <p class="note">Lấy key miễn phí tại aistudio.google.com. Điểm và ảnh lưu offline trong máy.</p>
-      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-N</div></div>
+      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.18-O</div></div>
     </div>
   </div>
 </div>
@@ -636,8 +636,8 @@ ${notes?`\nGHI CHÚ THÊM: ${notes}\n`:''}
 ${MATH_RULES}
 Với MỖI câu:
 - "tra_loi": chép ĐÚNG những gì học sinh viết/khoanh.
-- "dap_an_dung": đáp án đúng do bạn xác định.
-- "dung": "dung" / "sai" / "mot_phan".
+- "dap_an_dung": TỰ GIẢI bằng kiến thức toán để tìm đáp án ĐÚNG. Làm phép tính CẨN THẬN từng bước (phần trăm, thể tích, diện tích, vận tốc, đổi đơn vị...). Ghi đáp án đúng vào đây, và tóm tắt CÁCH TÍNH vào "ly_do". TUYỆT ĐỐI không suy ngược từ đáp án học sinh chọn.
+- "dung": so sánh "tra_loi" (học sinh chọn) với "dap_an_dung" (bạn vừa tự giải) → "dung" nếu khớp, "sai" nếu khác, "mot_phan" nếu đúng một phần. Phải dựa trên kết quả bạn tự tính, không đoán.
 - "diem_dat" (0..diem_toi_da) và "diem_toi_da". Với bài giải: đúng bước & ra đúng kết quả thì điểm tối đa kể cả giải cách khác; nhiều phần thì cộng từng phần. "ly_do" ngắn.
 - "trang", "vi_tri": ô bao SÁT đáp án HỌC SINH ĐÃ CHỌN (trắc nghiệm: chữ cái/ô tròn được khoanh; điền khuyết & đáp số: chữ học sinh viết; tự luận: dòng ĐÁP SỐ cuối). Không lấy ô bao cả dòng đề/cả câu. [ymin,xmin,ymax,xmax] chuẩn hoá 0-1000.
 Đọc tên học sinh nếu thấy.
@@ -726,13 +726,14 @@ function annotatePage(imgSrc,details,score,pageNum,withStamp){
   return new Promise(res=>{const img=new Image();
     img.onload=()=>{const W=img.width,H=img.height;const c=document.createElement('canvas');c.width=W;c.height=H;const ctx=c.getContext('2d');ctx.drawImage(img,0,0);
       const u=Math.max(W,H)/45;ctx.lineWidth=Math.max(2,u/9);ctx.textBaseline='middle';
-      details.forEach(d=>{if(!d.bbox)return;if((d.page||1)!==pageNum)return;const[ymin,xmin,ymax,xmax]=d.bbox;let x=(xmax/1000)*W+u*.4,y=((ymin+ymax)/2/1000)*H;
-        x=Math.min(Math.max(x,u),W-u);y=Math.min(Math.max(y,u),H-u);
+      details.forEach(d=>{if(!d.bbox)return;if((d.page||1)!==pageNum)return;const[ymin,xmin,ymax,xmax]=d.bbox;
+        let y=((ymin+ymax)/2/1000)*H;y=Math.min(Math.max(y,withStamp?u*3.2:u),H-u);
+        const x=W*0.93; // cột lề phải, dóng thẳng theo dòng của câu
         if(d.status==='ok'){ctx.strokeStyle='#2f7d4f';ctx.beginPath();ctx.moveTo(x-u*.35,y);ctx.lineTo(x-u*.1,y+u*.3);ctx.lineTo(x+u*.4,y-u*.35);ctx.stroke();}
         else if(d.status==='part'){ctx.strokeStyle='#a9781a';ctx.beginPath();ctx.moveTo(x-u*.35,y);ctx.lineTo(x-u*.1,y+u*.3);ctx.lineTo(x+u*.4,y-u*.35);ctx.stroke();
-          ctx.fillStyle='#a9781a';ctx.font=`700 ${u*.55}px Arial`;ctx.fillText(d.earned+'/'+d.points,x+u*.55,y);}
+          ctx.fillStyle='#a9781a';ctx.font=`700 ${u*.55}px Arial`;ctx.textAlign='right';ctx.fillText(d.earned+'/'+d.points,x-u*.6,y);ctx.textAlign='start';}
         else{ctx.strokeStyle='#c0382f';ctx.fillStyle='#c0382f';ctx.beginPath();ctx.moveTo(x-u*.3,y-u*.3);ctx.lineTo(x+u*.3,y+u*.3);ctx.moveTo(x+u*.3,y-u*.3);ctx.lineTo(x-u*.3,y+u*.3);ctx.stroke();
-          if(d.correct&&d.type!=='tl'){ctx.font=`700 ${u*.6}px Arial`;ctx.fillText('→'+d.correct,x+u*.55,y);}}});
+          if(d.correct&&d.type!=='tl'){ctx.font=`700 ${u*.55}px Arial`;ctx.textAlign='right';ctx.fillText('→'+d.correct,x-u*.6,y);ctx.textAlign='start';}}});
       if(withStamp){const pad=u*.5,bw=u*4.2,bh=u*1.9;ctx.fillStyle='rgba(255,255,255,.82)';roundRect(ctx,W-bw-pad,pad,bw,bh,u*.3);ctx.fill();
         ctx.strokeStyle='#c0382f';ctx.lineWidth=Math.max(2,u/8);roundRect(ctx,W-bw-pad,pad,bw,bh,u*.3);ctx.stroke();
         ctx.fillStyle='#c0382f';ctx.textAlign='center';ctx.font=`800 ${u*1.15}px Arial`;ctx.fillText('Điểm: '+score,W-bw/2-pad,pad+bh*.5);ctx.textAlign='start';}
