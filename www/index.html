@@ -177,7 +177,7 @@
   .qblock .read input,.qblock .read textarea{font-size:13.5px;padding:8px 10px}
   .qblock .correct{font-size:12px;color:var(--muted);margin-top:5px}
   .qblock .reason{font-size:12px;color:var(--warn);margin-top:5px}
-  .mark{font-weight:800}.mark.ok{color:var(--ok)}.mark.no{color:var(--pen)}.mark.part{color:var(--warn)}
+  .mark{font-weight:800}.mark.ok{color:var(--ok)}.mark.no{color:var(--pen)}.mark.part{color:var(--warn)}.mark.skip{color:var(--muted)}
 
   .author{margin-top:15px;padding:13px;border:1px solid var(--hair);border-radius:12px;background:rgba(255,255,255,.45);font-size:13px}
   .author div{margin:1px 0}.author b{color:var(--ink)}
@@ -329,7 +329,7 @@
       <button class="btn-soft btn-sm" style="margin-top:8px" onclick="fetchModels()">Kiểm tra key &amp; tải thêm model</button>
       <div id="modelMsg" class="note" style="margin-top:8px"></div>
       <p class="note">Lấy key miễn phí tại aistudio.google.com. Điểm và ảnh lưu offline trong máy.</p>
-      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.19-C</div></div>
+      <div class="author"><div><b>Tác giả:</b> Phi Hồng</div><div><b>SĐT/Zalo:</b> 0971318088</div><div style="margin-top:4px;color:var(--muted);font-size:12px">Phiên bản: 2026.06.19-G</div></div>
     </div>
   </div>
 </div>
@@ -585,13 +585,17 @@ async function geminiRaw(parts){
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   const gc={responseMimeType:"application/json"};
   if(!/gemini-3/i.test(model))gc.temperature=0; // Gemini 3.x: để mặc định 1.0 (Google khuyến nghị)
-  if(/gemini-3-flash|gemini-3\.5/i.test(model)){gc.thinkingConfig={thinkingLevel:"high"};gc.maxOutputTokens=32768;gc.mediaResolution="MEDIA_RESOLUTION_HIGH";} // suy nghĩ kỹ + đọc nét chữ/cột số để bắt đặt tính lệch
-  const resp=await gemFetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts}],generationConfig:gc})});
-  const data=await resp.json();
-  const cand=data.candidates&&data.candidates[0];
-  const text=(cand?.content?.parts||[]).map(p=>p.text||'').join('');
-  if(!text){const fr=(cand&&cand.finishReason)||(data.promptFeedback&&data.promptFeedback.blockReason)||'không rõ';throw new Error('mô hình không trả nội dung (lý do: '+fr+')');}
-  return text;
+  if(/gemini-3-flash|gemini-3\.5/i.test(model)){gc.thinkingConfig={thinkingLevel:"high"};gc.maxOutputTokens=65536;gc.mediaResolution="MEDIA_RESOLUTION_HIGH";} // suy nghĩ kỹ; cho nhiều token để không bị cắt thành rỗng
+  let lastFr='không rõ';
+  for(let attempt=0;attempt<2;attempt++){
+    const resp=await gemFetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts}],generationConfig:gc})});
+    const data=await resp.json();
+    const cand=data.candidates&&data.candidates[0];
+    const text=(cand?.content?.parts||[]).map(p=>p.text||'').join('');
+    if(text)return text;
+    lastFr=(cand&&cand.finishReason)||(data.promptFeedback&&data.promptFeedback.blockReason)||'không rõ';
+  }
+  throw new Error('mô hình không trả nội dung (lý do: '+lastFr+'). Hãy thử chấm lại, hoặc đổi mô hình trong Cài đặt.');
 }
 const MATH_RULES=`QUY TẮC CHẤM TOÁN (rất quan trọng, phải tuân thủ nghiêm):
 - Chấm theo CÁCH LÀM, không chỉ nhìn đáp số. Đáp số đúng nhưng cách làm sai thì KHÔNG cho điểm (nhiều khả năng chép).
@@ -604,7 +608,8 @@ const MATH_RULES=`QUY TẮC CHẤM TOÁN (rất quan trọng, phải tuân thủ
 - Đặt tính SAI thì ý đó 0 điểm DÙ đáp số đúng (coi là chép). Nếu học sinh GẠCH XÓA rồi viết lại: chỉ xét bản CUỐI CÙNG, và vẫn phải soi cột của bản cuối đó (đừng vì viết lại sạch mà cho qua).
 - Một câu có nhiều ý (a, b, ...): chấm RIÊNG từng ý và cộng lại. Ý nào đặt tính sai thì ý đó 0 điểm, ý đúng vẫn được điểm của ý đó. (Ví dụ câu 1 điểm có ý a và b, mỗi ý 0,5đ: a đúng + b đặt tính sai → 0,5 điểm.)
 - Phép nhân/chia nhiều bước: phải có các bước trung gian hợp lý; thiếu bước hoặc bước sai thì trừ điểm dù kết quả cuối đúng.
-- Chỉ cho điểm tối đa của ý khi CẢ cách làm lẫn kết quả đều đúng.`;
+- Chỉ cho điểm tối đa của ý khi CẢ cách làm lẫn kết quả đều đúng.
+- GỢI Ý / "ly_do" phải viết theo cách ĐƠN GIẢN NHẤT của toán TIỂU HỌC (lớp 5), từng bước ngắn gọn, dễ hiểu với học sinh nhỏ. TUYỆT ĐỐI KHÔNG dùng kiến thức lớp trên: KHÔNG căn bậc hai/bậc ba (sqrt, √), KHÔNG đặt ẩn x hay lập phương trình, KHÔNG luỹ thừa/ký hiệu nâng cao. Ví dụ: tìm cạnh hình lập phương biết thể tích 216 thì viết "tìm số nào nhân với chính nó 3 lần được 216: 6×6×6=216 → cạnh 6cm" (KHÔNG viết căn bậc ba); biết diện tích một mặt 36 thì "6×6=36 → cạnh 6cm" (KHÔNG viết sqrt).`;
 function buildGradePrompt(nPages){
   const notes=document.getElementById('notes').value.trim();
   const list=KEYDATA.map(k=>{
@@ -663,6 +668,7 @@ function gradeOne(reading){
   const map={};(reading.cac_cau||[]).forEach(c=>map[c.cau]=c);
   const details=KEYDATA.map(k=>{const r=map[k.q]||{};const read=(r.tra_loi||'').toString().trim();
     const bbox=Array.isArray(r.vi_tri)&&r.vi_tri.length===4?r.vi_tri:null;const page=Math.max(1,parseInt(r.trang)||1);
+    if(!read)return {q:k.q,type:k.type,read:'',correct:k.answer,status:'blank',earned:0,points:k.points,reason:(r.ly_do||'').toString().trim(),page,bbox:null}; // bỏ trống: không chấm, 0 điểm, vẫn giữ gợi ý
     if(k.type==='tl'){let e=parseFloat(r.diem_dat);if(isNaN(e))e=0;e=Math.max(0,Math.min(e,k.points||e));
       const status=(k.points&&e>=k.points)?'ok':(e<=0?'no':'part');
       return {q:k.q,type:'tl',read,correct:k.answer,status,earned:e,points:k.points,reason:(r.ly_do||'').toString().trim(),page,bbox};}
@@ -676,10 +682,12 @@ function gradeOne(reading){
 function gradeAuto(reading){
   const details=(reading.cac_cau||[]).map(c=>{
     const points=Math.max(0,parseFloat(c.diem_toi_da)||0);
+    const read=(c.tra_loi||'').toString().trim();
+    if(!read)return {q:c.cau,type:'auto',read:'',correct:(c.dap_an_dung||'').toString().trim(),status:'blank',earned:0,points,reason:(c.ly_do||'').toString().trim(),page:Math.max(1,parseInt(c.trang)||1),bbox:null}; // bỏ trống: không chấm, 0 điểm, vẫn giữ gợi ý
     let e=parseFloat(c.diem_dat);if(isNaN(e))e=0;e=Math.max(0,Math.min(e,points||e));
     const d=(c.dung||'').toString();let status=d==='dung'?'ok':d==='mot_phan'?'part':d==='sai'?'no':(points&&e>=points?'ok':e<=0?'no':'part');
     if(status==='ok'&&points&&e<points)status='part';
-    return {q:c.cau,type:'auto',read:(c.tra_loi||'').toString().trim(),correct:(c.dap_an_dung||'').toString().trim(),
+    return {q:c.cau,type:'auto',read,correct:(c.dap_an_dung||'').toString().trim(),
       status,earned:e,points,reason:(c.ly_do||'').toString().trim(),page:Math.max(1,parseInt(c.trang)||1),
       bbox:Array.isArray(c.vi_tri)&&c.vi_tri.length===4?c.vi_tri:null};
   });
@@ -795,7 +803,7 @@ async function addFolderFromInput(){
   if(!name){toast('Hãy nhập tên thư mục');return;}
   const f={id:'fd'+Date.now(),name,createdAt:Date.now()};FOLDERS.push(f);await saveFolders();inp.value='';renderFolderCards();toast('Đã thêm thư mục');
 }
-function updateFolderChip(){const c=document.getElementById('folderChip');if(c)c.innerHTML='Chấm xong sẽ chọn thư mục để lưu kết quả · xem ở tab Kết quả';}
+function updateFolderChip(){}
 function openFolderPick(){renderFolderPickList();document.getElementById('folderPickBg').classList.add('show');document.body.style.overflow='hidden';}
 function closeFolderPick(){document.getElementById('folderPickBg').classList.remove('show');document.body.style.overflow='';}
 function renderFolderPickList(){
@@ -864,8 +872,8 @@ function renderPapers(){const wrap=document.getElementById('paperList');if(!wrap
 
 /* ===================== MODAL DUYỆT ===================== */
 function paperById(id){return PAPERS.find(p=>p.id===id);}
-function markHtml(s,j){const m=s==='ok'?['ok','✓']:s==='part'?['part','½']:['no','✗'];return `<span class="mark ${m[0]}" id="mk-${j}">${m[1]}</span>`;}
-function setMark(j,s){const el=document.getElementById('mk-'+j);if(!el)return;const m=s==='ok'?['ok','✓']:s==='part'?['part','½']:['no','✗'];el.className='mark '+m[0];el.textContent=m[1];}
+function markHtml(s,j){const m=s==='ok'?['ok','✓']:s==='part'?['part','½']:s==='blank'?['skip','—']:['no','✗'];return `<span class="mark ${m[0]}" id="mk-${j}">${m[1]}</span>`;}
+function setMark(j,s){const el=document.getElementById('mk-'+j);if(!el)return;const m=s==='ok'?['ok','✓']:s==='part'?['part','½']:s==='blank'?['skip','—']:['no','✗'];el.className='mark '+m[0];el.textContent=m[1];}
 async function openReview(id){currentPaperId=id;const p=paperById(id);if(!p)return;
   document.getElementById('mTitle').textContent=p.name;document.getElementById('mName').value=p.name;
   await drawModal();
@@ -878,7 +886,7 @@ async function openReview(id){currentPaperId=id;const p=paperById(id);if(!p)retu
         <span class="right">điểm <input type="number" step="0.25" min="0" max="${d.points}" value="${d.earned}" oninput="editPts(${j},this.value)"> /${d.points}</span></div>
       <div class="read"><label style="font-weight:650;color:var(--muted)">Học sinh:</label>${readField}</div>
       ${d.correct&&d.type!=='tl'?`<div class="correct">Đáp án đúng: <b>${escHtml(d.correct)}</b></div>`:''}
-      ${(d.reason && !(d.status==='ok'&&(d.type==='tn'||/^[A-Da-d]$/.test((d.correct||'').toString().trim()))))?`<div class="reason">Gợi ý: ${escHtml(d.reason)}</div>`:''}`;
+      ${(d.reason && d.status!=='ok')?`<div class="reason">Gợi ý: ${escHtml(d.reason)}</div>`:''}`;
     q.appendChild(blk);});
   recalcModal();document.getElementById('modalBg').classList.add('show');document.body.style.overflow='hidden';
 }
@@ -913,8 +921,12 @@ async function regradeCurrent(){
   try{
     const blobs=getPages(p);if(!blobs.length)throw new Error('không còn ảnh bài để chấm lại');
     const pages=[];for(const b of blobs)pages.push({mime:b.type||'image/jpeg',base64:await blobToB64(b)});
-    const reading=await callGrade(pages,note);
-    if(!reading||!reading.cac_cau||!reading.cac_cau.length)throw new Error('mô hình trả về rỗng');
+    let reading=null,lastErr=null;
+    for(let a=0;a<3&&!(reading&&reading.cac_cau&&reading.cac_cau.length);a++){
+      btn.textContent=a===0?'Đang chấm lại...':`Đang chấm lại... (lần ${a+1})`;
+      try{reading=await callGrade(pages,note);}catch(e){lastErr=e;reading=null;}
+    }
+    if(!reading||!reading.cac_cau||!reading.cac_cau.length)throw new Error(lastErr?lastErr.message:'mô hình chưa đọc được bài, hãy thử lại lần nữa');
     const g=gradeOne(reading);
     p.score=g.score;p.details=g.details;
     await idbPut('papers',p);
